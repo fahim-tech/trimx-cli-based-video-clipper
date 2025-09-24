@@ -106,5 +106,65 @@ impl fmt::Display for TimeSpec {
     }
 }
 
+/// Timebase for timestamp calculations - represents rational number for timestamp conversion
+#[derive(Debug, Clone, PartialEq)]
+pub struct Timebase {
+    pub num: i32,
+    pub den: i32,
+}
+
+impl Timebase {
+    /// Create a new timebase
+    pub fn new(num: i32, den: i32) -> Result<Self, DomainError> {
+        if den == 0 {
+            return Err(DomainError::BadArgs("Timebase denominator cannot be zero".to_string()));
+        }
+        Ok(Self { num, den })
+    }
+    
+    /// Convert to floating point seconds
+    pub fn to_seconds(&self) -> f64 {
+        self.num as f64 / self.den as f64
+    }
+    
+    /// Rescale PTS from this timebase to target timebase
+    pub fn rescale_pts(&self, pts: i64, target: &Timebase) -> i64 {
+        if self.den == target.den && self.num == target.num {
+            return pts;
+        }
+        
+        // Convert to seconds and back to target timebase
+        let seconds = pts as f64 * self.to_seconds();
+        (seconds / target.to_seconds()) as i64
+    }
+    
+    /// Convert PTS to seconds
+    pub fn pts_to_seconds(&self, pts: i64) -> f64 {
+        pts as f64 * self.to_seconds()
+    }
+    
+    /// Convert seconds to PTS
+    pub fn seconds_to_pts(&self, seconds: f64) -> i64 {
+        (seconds / self.to_seconds()) as i64
+    }
+    
+    /// Common timebases
+    pub fn av_time_base() -> Self {
+        Self { num: 1, den: 1000000 } // microseconds
+    }
+    
+    pub fn frame_rate_30() -> Self {
+        Self { num: 1, den: 30 }
+    }
+    
+    pub fn frame_rate_25() -> Self {
+        Self { num: 1, den: 25 }
+    }
+    
+    pub fn frame_rate_24() -> Self {
+        Self { num: 1001, den: 24000 } // 23.976 fps
+    }
+}
+
 #[cfg(test)]
 mod tests;
