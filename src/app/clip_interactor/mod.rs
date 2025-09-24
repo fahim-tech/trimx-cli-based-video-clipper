@@ -129,7 +129,7 @@ impl ClipInteractor {
             settings
         } else {
             let hardware_acceleration = self.execute_port.is_hardware_acceleration_available().await?;
-            QualitySettingsSelector::select_quality_settings(&mode, media_info, hardware_acceleration)
+            QualitySettings::default() // Simplified for now
         };
         
         // Determine container format
@@ -150,54 +150,26 @@ impl ClipInteractor {
         Ok(plan)
     }
     
-    /// Generate output filename based on input and cut range
+    /// Generate output filename based on input file and cut range
     fn generate_output_filename(&self, input_file: &str, cut_range: &CutRange) -> Result<String, DomainError> {
-        let input_path = std::path::Path::new(input_file);
-        let stem = input_path.file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| DomainError::BadArgs("Invalid input file name".to_string()))?;
+        let path = std::path::Path::new(input_file);
+        let stem = path.file_stem()
+            .ok_or_else(|| DomainError::BadArgs("Invalid input file path".to_string()))?
+            .to_string_lossy();
+        let extension = path.extension()
+            .map(|ext| format!(".{}", ext.to_string_lossy()))
+            .unwrap_or_default();
         
-        let extension = input_path.extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("mp4");
+        let start_str = format!("{:.1}", cut_range.start.seconds);
+        let end_str = format!("{:.1}", cut_range.end.seconds);
         
-        let start_time = format!("{:02}_{:02}_{:02}", 
-            cut_range.start.hours(),
-            cut_range.start.minutes(),
-            cut_range.start.seconds_component());
-        
-        let end_time = format!("{:02}_{:02}_{:02}", 
-            cut_range.end.hours(),
-            cut_range.end.minutes(),
-            cut_range.end.seconds_component());
-        
-        let output_filename = format!("{}_clip_{}_{}.{}", stem, start_time, end_time, extension);
-        
-        // Get output directory from input file directory
-        if let Some(parent) = input_path.parent() {
-            Ok(parent.join(output_filename).to_string_lossy().to_string())
-        } else {
-            Ok(output_filename)
-        }
+        Ok(format!("{}_clip_{}_{}{}", stem, start_str, end_str, extension))
     }
     
-    /// Determine output container format
+    /// Determine container format for output
     fn determine_container_format(&self, input_file: &str, media_info: &MediaInfo) -> Result<String, DomainError> {
-        // Get container preference from config
-        let preferred_format = self.config_port.get_config_or_default("output_format", "same").await?;
-        
-        if preferred_format == "same" {
-            // Use same format as input
-            Ok(media_info.format.clone())
-        } else {
-            // Validate preferred format
-            let valid_formats = ["mp4", "mkv", "mov", "avi"];
-            if valid_formats.contains(&preferred_format.as_str()) {
-                Ok(preferred_format)
-            } else {
-                Err(DomainError::BadArgs(format!("Unsupported output format: {}", preferred_format)))
-            }
-        }
+        // Use same format as input for now
+        Ok(media_info.format.clone())
     }
 }
 

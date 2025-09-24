@@ -136,75 +136,6 @@ pub struct KeyframeProximity {
     pub is_copy_viable: bool,
 }
 
-/// Business rules for quality settings
-pub struct QualitySettingsSelector;
-
-impl QualitySettingsSelector {
-    /// Select optimal quality settings based on content and mode
-    pub fn select_quality_settings(
-        mode: &ClippingMode,
-        media_info: &MediaInfo,
-        hardware_acceleration_available: bool,
-    ) -> QualitySettings {
-        match mode {
-            ClippingMode::Copy => {
-                // Copy mode doesn't need quality settings
-                QualitySettings::default()
-            },
-            ClippingMode::Reencode => {
-                Self::select_reencode_quality(media_info, hardware_acceleration_available)
-            },
-            ClippingMode::Hybrid => {
-                Self::select_hybrid_quality(media_info, hardware_acceleration_available)
-            },
-            ClippingMode::Auto => {
-                // This shouldn't happen as auto should be resolved first
-                QualitySettings::default()
-            }
-        }
-    }
-    
-    /// Select quality settings for re-encode mode
-    fn select_reencode_quality(
-        media_info: &MediaInfo,
-        hardware_acceleration_available: bool,
-    ) -> QualitySettings {
-        let mut settings = QualitySettings::default();
-        
-        // Adjust preset based on content complexity
-        if let Some(video_stream) = media_info.primary_video_stream() {
-            if video_stream.width * video_stream.height > 1920 * 1080 {
-                settings.preset = "slow".to_string(); // High resolution needs slower preset
-            } else {
-                settings.preset = "medium".to_string();
-            }
-            
-            // Adjust CRF based on source quality
-            if let Some(bit_rate) = video_stream.bit_rate {
-                if bit_rate > 5_000_000 { // > 5 Mbps
-                    settings.crf = Some(20); // Higher quality for high bitrate source
-                } else if bit_rate < 1_000_000 { // < 1 Mbps
-                    settings.crf = Some(16); // Lower quality for low bitrate source
-                }
-            }
-        }
-        
-        settings.hardware_acceleration = hardware_acceleration_available;
-        settings
-    }
-    
-    /// Select quality settings for hybrid mode
-    fn select_hybrid_quality(
-        media_info: &MediaInfo,
-        hardware_acceleration_available: bool,
-    ) -> QualitySettings {
-        let mut settings = QualitySettings::default();
-        settings.preset = "fast".to_string(); // Hybrid mode prioritizes speed
-        settings.hardware_acceleration = hardware_acceleration_available;
-        settings
-    }
-}
-
 /// Business rules for stream mapping
 pub struct StreamMapper;
 
@@ -254,7 +185,7 @@ impl StreamMapper {
         }
         
         if mappings.is_empty() {
-            return Err(DomainError::PlanUnsupported("No streams found to map".to_string()));
+            return Err(DomainError::BadArgs("No streams found to map".to_string()));
         }
         
         Ok(mappings)
@@ -333,3 +264,6 @@ pub struct ValidationResult {
     pub duration_difference_ms: u32,
     pub overall_valid: bool,
 }
+
+#[cfg(test)]
+mod tests;

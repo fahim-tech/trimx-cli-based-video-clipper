@@ -4,29 +4,25 @@ on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
-  release:
-    types: [ published ]
+    branches: [ main, develop ]
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Test
-    runs-on: windows-latest
-    
+  # Quality Gates
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+    
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
-        
-    - name: Cache cargo registry
+    
+    - name: Cache cargo dependencies
       uses: actions/cache@v3
       with:
         path: |
@@ -36,37 +32,29 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
-          
-    - name: Install FFmpeg
-      run: |
-        choco install ffmpeg -y
-        
+    
     - name: Check formatting
       run: cargo fmt --all -- --check
-      
+    
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
-      
-    - name: Run tests
-      run: cargo test --verbose
-      
-    - name: Build
-      run: cargo build --verbose --release
 
-  build-windows:
-    name: Build Windows Release
-    runs-on: windows-latest
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta, nightly]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Cache cargo registry
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust ${{ matrix.rust }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+    
+    - name: Cache cargo dependencies
       uses: actions/cache@v3
       with:
         path: |
@@ -76,65 +64,197 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
-          
-    - name: Install FFmpeg
-      run: |
-        choco install ffmpeg -y
-        
-    - name: Build release
-      run: cargo build --release --verbose
-      
-    - name: Create release archive
-      run: |
-        mkdir release
-        copy target\release\clipper.exe release\
-        copy README.md release\
-        copy LICENSE release\
-        Compress-Archive -Path release\* -DestinationPath trimx-clipper-windows.zip
-        
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+    
+    - name: Run tests
+      run: cargo test --all-features --verbose
+    
+    - name: Run integration tests
+      run: cargo test --test integration_tests --verbose
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install tarpaulin
+      run: cargo install cargo-tarpaulin
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
       with:
-        name: windows-release
-        path: trimx-clipper-windows.zip
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Generate coverage report
+      run: cargo tarpaulin --out Html --output-dir coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/tarpaulin-report.html
+        flags: unittests
+        name: codecov-umbrella
 
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+    
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-      
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
     - name: Install cargo-audit
       run: cargo install cargo-audit
-      
+    
     - name: Run security audit
       run: cargo audit
-
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: [test, build-windows, security]
-    if: github.event_name == 'release'
     
+    - name: Install cargo-deny
+      run: cargo install cargo-deny
+    
+    - name: Run license and security checks
+      run: cargo deny check
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Download build artifacts
-      uses: actions/download-artifact@v3
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
       with:
-        name: windows-release
-        path: ./artifacts
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build (debug)
+      run: cargo build --verbose
+    
+    - name: Build (release)
+      run: cargo build --release --verbose
+    
+    - name: Build (all features)
+      run: cargo build --all-features --verbose
+
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
       with:
-        files: ./artifacts/trimx-clipper-windows.zip
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Run benchmarks
+      run: cargo bench --verbose
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rust-docs
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Generate documentation
+      run: cargo doc --no-deps --document-private-items
+    
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./target/doc
+
+  # Deployment (only on main branch)
+  deploy:
+    name: Deploy
+    needs: [lint, test, coverage, security, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build release binary
+      run: cargo build --release
+    
+    - name: Create release archive
+      run: |
+        tar -czf trimx-linux-x64.tar.gz target/release/trimx
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: trimx-linux-x64
+        path: trimx-linux-x64.tar.gz

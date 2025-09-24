@@ -1,0 +1,59 @@
+# TrimX CLI Video Clipper - Development Configuration
+# This file contains development-specific settings
+
+[general]
+name = "TrimX CLI Video Clipper"
+version = "0.1.0"
+description = "A Windows-native command-line tool for precise video clipping"
+
+[logging]
+level = "debug"
+format = "pretty"
+json_output = false
+file_logging = true
+log_file = "logs/trimx.log"
+max_file_size = "10MB"
+max_files = 5
+
+[output]
+default_format = "mp4"
+overwrite_policy = "prompt"
+atomic_writes = true
+temp_directory = "temp/"
+preserve_metadata = true
+
+[quality]
+default_crf = 23
+default_preset = "medium"
+enable_hardware_acceleration = true
+preferred_hardware = ["nvenc", "qsv", "vaapi"]
+
+[performance]
+max_memory_usage = "2GB"
+thread_count = 0  # 0 = auto-detect
+enable_parallel_processing = true
+buffer_size = "64MB"
+
+[validation]
+strict_mode = false
+validate_input_files = true
+check_codec_support = true
+warn_on_potential_issues = true
+
+[paths]
+config_directory = "config/"
+log_directory = "logs/"
+temp_directory = "temp/"
+cache_directory = "cache/"
+
+[features]
+enable_telemetry = false
+enable_crash_reporting = false
+enable_performance_monitoring = true
+enable_debug_output = true
+
+[development]
+mock_mode = true
+simulate_processing_delay = true
+processing_delay_ms = 1000
+verbose_output = true

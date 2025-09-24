@@ -1,0 +1,137 @@
+{
+  // TrimX CLI Video Clipper - VS Code Extensions Recommendations
+  
+  "recommendations": [
+    // Rust development
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    
+    // Configuration files
+    "tamasfe.even-better-toml",
+    
+    // Code formatting and linting
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-json",
+    "redhat.vscode-yaml",
+    "ms-vscode.vscode-markdown",
+    
+    // Git and version control
+    "ms-vscode.vscode-git",
+    "eamodio.gitlens",
+    
+    // CI/CD and DevOps
+    "ms-vscode.vscode-github-actions",
+    "ms-vscode.vscode-docker",
+    
+    // Testing and debugging
+    "hbenl.vscode-test-explorer",
+    "ms-vscode.test-adapter-converter",
+    
+    // Productivity
+    "ms-vscode.vscode-typescript-next",
+    "bradlc.vscode-tailwindcss",
+    "formulahendry.auto-rename-tag",
+    "christian-kohler.path-intellisense",
+    
+    // Documentation
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+    
+    // Code quality
+    "ms-vscode.vscode-eslint",
+    "ms-vscode.vscode-prettier",
+    
+    // File management
+    "alefragnani.bookmarks",
+    "ms-vscode.vscode-explorer-excluded-files",
+    
+    // Terminal and shell
+    "ms-vscode.powershell",
+    "ms-vscode.vscode-bash",
+    
+    // Themes and icons
+    "vscode-icons-team.vscode-icons",
+    "pkief.material-icon-theme",
+    
+    // Utilities
+    "ms-vscode.vscode-json",
+    "ms-vscode.vscode-yaml",
+    "ms-vscode.vscode-toml",
+    
+    // Performance and monitoring
+    "ms-vscode.vscode-performance",
+    "ms-vscode.vscode-memory-usage"
+  ],
+  
+  "unwantedRecommendations": [
+    // Extensions that might conflict or are not needed
+    "ms-vscode.vscode-typescript",
+    "ms-vscode.vscode-javascript",
+    "ms-vscode.vscode-python",
+    "ms-vscode.vscode-java",
+    "ms-vscode.vscode-cpp",
+    "ms-vscode.vscode-csharp",
+    "ms-vscode.vscode-go",
+    "ms-vscode.vscode-php",
+    "ms-vscode.vscode-ruby",
+    "ms-vscode.vscode-swift",
+    "ms-vscode.vscode-kotlin",
+    "ms-vscode.vscode-scala",
+    "ms-vscode.vscode-clojure",
+    "ms-vscode.vscode-haskell",
+    "ms-vscode.vscode-elm",
+    "ms-vscode.vscode-fsharp",
+    "ms-vscode.vscode-erlang",
+    "ms-vscode.vscode-elixir",
+    "ms-vscode.vscode-dart",
+    "ms-vscode.vscode-r",
+    "ms-vscode.vscode-lua",
+    "ms-vscode.vscode-perl",
+    "ms-vscode.vscode-sql",
+    "ms-vscode.vscode-xml",
+    "ms-vscode.vscode-html",
+    "ms-vscode.vscode-css",
+    "ms-vscode.vscode-scss",
+    "ms-vscode.vscode-less",
+    "ms-vscode.vscode-stylus",
+    "ms-vscode.vscode-sass",
+    "ms-vscode.vscode-postcss",
+    "ms-vscode.vscode-autoprefixer",
+    "ms-vscode.vscode-babel",
+    "ms-vscode.vscode-webpack",
+    "ms-vscode.vscode-gulp",
+    "ms-vscode.vscode-grunt",
+    "ms-vscode.vscode-npm",
+    "ms-vscode.vscode-yarn",
+    "ms-vscode.vscode-bower",
+    "ms-vscode.vscode-jshint",
+    "ms-vscode.vscode-jscs",
+    "ms-vscode.vscode-coffeelint",
+    "ms-vscode.vscode-tslint",
+    "ms-vscode.vscode-stylelint",
+    "ms-vscode.vscode-sass-lint",
+    "ms-vscode.vscode-csslint",
+    "ms-vscode.vscode-htmlhint",
+    "ms-vscode.vscode-jsonlint",
+    "ms-vscode.vscode-xmllint",
+    "ms-vscode.vscode-markdownlint",
+    "ms-vscode.vscode-yamllint",
+    "ms-vscode.vscode-tomllint",
+    "ms-vscode.vscode-ini",
+    "ms-vscode.vscode-properties",
+    "ms-vscode.vscode-editorconfig",
+    "ms-vscode.vscode-gitignore",
+    "ms-vscode.vscode-dockerignore",
+    "ms-vscode.vscode-eslintignore",
+    "ms-vscode.vscode-prettierignore",
+    "ms-vscode.vscode-stylelintignore",
+    "ms-vscode.vscode-sasslintignore",
+    "ms-vscode.vscode-csslintignore",
+    "ms-vscode.vscode-htmlhintignore",
+    "ms-vscode.vscode-jsonlintignore",
+    "ms-vscode.vscode-xmllintignore",
+    "ms-vscode.vscode-markdownlintignore",
+    "ms-vscode.vscode-yamllintignore",
+    "ms-vscode.vscode-tomllintignore"
+  ]
+}

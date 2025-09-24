@@ -93,12 +93,12 @@ impl ExecutePort for ExecLibavAdapter {
         
         // Validate plan
         if plan.input_file.is_empty() || plan.output_file.is_empty() {
-            return Err(DomainError::ExecFail("Invalid execution plan: empty file paths".to_string()));
+            return Err(DomainError::ProcessingError("Invalid execution plan: empty file paths".to_string()));
         }
         
         // Check if input file exists
         if !std::path::Path::new(&plan.input_file).exists() {
-            return Err(DomainError::ExecFail(format!("Input file does not exist: {}", plan.input_file)));
+            return Err(DomainError::ProcessingError(format!("Input file does not exist: {}", plan.input_file)));
         }
         
         // Simulate execution based on mode
@@ -107,7 +107,7 @@ impl ExecutePort for ExecLibavAdapter {
             ClippingMode::Reencode => self.execute_reencode_mode(plan).await,
             ClippingMode::Hybrid => self.execute_hybrid_mode(plan).await,
             ClippingMode::Auto => {
-                return Err(DomainError::ExecFail("Auto mode should be resolved before execution".to_string()));
+                return Err(DomainError::ProcessingError("Auto mode should be resolved before execution".to_string()));
             }
         };
         

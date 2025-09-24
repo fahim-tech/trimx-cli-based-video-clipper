@@ -1,66 +1,56 @@
-// Domain errors - Domain-specific error types
+// Domain errors - Error types for the domain layer
 
 use std::fmt;
 
-/// Domain-level error types
+/// Domain-specific error types
 #[derive(Debug, Clone)]
 pub enum DomainError {
-    /// Invalid command-line arguments or parameters
+    /// Invalid arguments provided
     BadArgs(String),
-    /// Cut range exceeds media duration or is invalid
-    OutOfRange(String),
-    /// Media file inspection failed
+    /// File not found
+    FileNotFound(String),
+    /// Invalid file format
+    InvalidFormat(String),
+    /// Codec not supported
+    UnsupportedCodec(String),
+    /// Invalid time range
+    InvalidTimeRange(String),
+    /// Insufficient permissions
+    PermissionDenied(String),
+    /// Resource not available
+    ResourceUnavailable(String),
+    /// Validation failed
+    ValidationFailed(String),
+    /// Processing error
+    ProcessingError(String),
+    /// Internal error
+    InternalError(String),
+    /// Probe failure
     ProbeFail(String),
-    /// Cannot create valid execution plan
-    PlanUnsupported(String),
-    /// Execution engine failed
-    ExecFail(String),
-    /// File system operations failed
+    /// Out of range error
+    OutOfRange(String),
+    /// File system error
     FsFail(String),
-    /// Output verification failed
-    VerifyFail(String),
-    /// Feature not yet implemented
-    NotImplemented,
 }
 
 impl fmt::Display for DomainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DomainError::BadArgs(msg) => write!(f, "Invalid arguments: {}", msg),
-            DomainError::OutOfRange(msg) => write!(f, "Range error: {}", msg),
-            DomainError::ProbeFail(msg) => write!(f, "Probe failed: {}", msg),
-            DomainError::PlanUnsupported(msg) => write!(f, "Plan unsupported: {}", msg),
-            DomainError::ExecFail(msg) => write!(f, "Execution failed: {}", msg),
+            DomainError::BadArgs(msg) => write!(f, "Bad arguments: {}", msg),
+            DomainError::FileNotFound(msg) => write!(f, "File not found: {}", msg),
+            DomainError::InvalidFormat(msg) => write!(f, "Invalid format: {}", msg),
+            DomainError::UnsupportedCodec(msg) => write!(f, "Unsupported codec: {}", msg),
+            DomainError::InvalidTimeRange(msg) => write!(f, "Invalid time range: {}", msg),
+            DomainError::PermissionDenied(msg) => write!(f, "Permission denied: {}", msg),
+            DomainError::ResourceUnavailable(msg) => write!(f, "Resource unavailable: {}", msg),
+            DomainError::ValidationFailed(msg) => write!(f, "Validation failed: {}", msg),
+            DomainError::ProcessingError(msg) => write!(f, "Processing error: {}", msg),
+            DomainError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            DomainError::ProbeFail(msg) => write!(f, "Probe failure: {}", msg),
+            DomainError::OutOfRange(msg) => write!(f, "Out of range: {}", msg),
             DomainError::FsFail(msg) => write!(f, "File system error: {}", msg),
-            DomainError::VerifyFail(msg) => write!(f, "Verification failed: {}", msg),
-            DomainError::NotImplemented => write!(f, "Feature not implemented"),
         }
     }
 }
 
 impl std::error::Error for DomainError {}
-
-/// Exit codes for automation
-#[derive(Debug, Clone, Copy)]
-pub enum ExitCode {
-    Success = 0,
-    InvalidArgs = 2,
-    ProbeFailure = 3,
-    ExecutionFailure = 4,
-    FilesystemFailure = 5,
-}
-
-impl From<DomainError> for ExitCode {
-    fn from(error: DomainError) -> Self {
-        match error {
-            DomainError::BadArgs(_) => ExitCode::InvalidArgs,
-            DomainError::OutOfRange(_) => ExitCode::InvalidArgs,
-            DomainError::ProbeFail(_) => ExitCode::ProbeFailure,
-            DomainError::PlanUnsupported(_) => ExitCode::ExecutionFailure,
-            DomainError::ExecFail(_) => ExitCode::ExecutionFailure,
-            DomainError::FsFail(_) => ExitCode::FilesystemFailure,
-            DomainError::VerifyFail(_) => ExitCode::ExecutionFailure,
-            DomainError::NotImplemented => ExitCode::ExecutionFailure,
-        }
-    }
-}

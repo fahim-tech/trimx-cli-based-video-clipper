@@ -35,26 +35,6 @@ impl TimeSpec {
         Self { seconds: duration.as_secs_f64() }
     }
     
-    /// Get hours component
-    pub fn hours(&self) -> u32 {
-        (self.seconds / 3600.0) as u32
-    }
-    
-    /// Get minutes component
-    pub fn minutes(&self) -> u32 {
-        ((self.seconds % 3600.0) / 60.0) as u32
-    }
-    
-    /// Get seconds component
-    pub fn seconds_component(&self) -> u32 {
-        (self.seconds % 60.0) as u32
-    }
-    
-    /// Get milliseconds component
-    pub fn milliseconds(&self) -> u32 {
-        ((self.seconds % 1.0) * 1000.0) as u32
-    }
-    
     /// Parse time string in various formats
     pub fn parse(time_str: &str) -> Result<Self, DomainError> {
         let trimmed = time_str.trim();
@@ -99,23 +79,30 @@ impl TimeSpec {
             
             Ok(Self::from_seconds(hours as f64 * 3600.0 + minutes as f64 * 60.0 + seconds_part))
         } else {
-            Err(DomainError::BadArgs("Invalid time format. Use HH:MM:SS.ms, MM:SS.ms, or seconds".to_string()))
+            Err(DomainError::BadArgs(
+                "Invalid time format. Supported formats: seconds (e.g., 123.45), MM:SS.ms (e.g., 2:30.5), HH:MM:SS.ms (e.g., 1:02:30.5)".to_string()
+            ))
+        }
+    }
+    
+    /// Format as HH:MM:SS.ms
+    pub fn format_hms(&self) -> String {
+        let hours = (self.seconds / 3600.0) as u32;
+        let minutes = ((self.seconds % 3600.0) / 60.0) as u32;
+        let seconds = (self.seconds % 60.0) as u32;
+        let milliseconds = ((self.seconds % 1.0) * 1000.0) as u32;
+        
+        if hours > 0 {
+            format!("{}:{:02}:{:02}.{:03}", hours, minutes, seconds, milliseconds)
+        } else {
+            format!("{}:{:02}.{:03}", minutes, seconds, milliseconds)
         }
     }
 }
 
 impl fmt::Display for TimeSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hours = self.hours();
-        let minutes = self.minutes();
-        let seconds = self.seconds_component();
-        let milliseconds = self.milliseconds();
-        
-        if hours > 0 {
-            write!(f, "{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, milliseconds)
-        } else {
-            write!(f, "{:02}:{:02}.{:03}", minutes, seconds, milliseconds)
-        }
+        write!(f, "{}", self.format_hms())
     }
 }
 
@@ -478,7 +465,7 @@ impl CutRange {
     }
 }
 
-/// Clipping mode selection
+/// Clipping mode enumeration
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClippingMode {
     Auto,
@@ -509,51 +496,6 @@ impl ClippingMode {
             Self::Reencode => "Precise frame-accurate cuts with re-encoding",
             Self::Hybrid => "GOP-spanning method (re-encode head/tail, copy middle)",
         }
-    }
-}
-
-/// Execution plan for video clipping
-#[derive(Debug, Clone)]
-pub struct ExecutionPlan {
-    pub mode: ClippingMode,
-    pub input_file: String,
-    pub output_file: String,
-    pub cut_range: CutRange,
-    pub streams: Vec<StreamMapping>,
-    pub quality_settings: QualitySettings,
-    pub container_format: String,
-}
-
-impl ExecutionPlan {
-    /// Create new execution plan with validation
-    pub fn new(
-        mode: ClippingMode,
-        input_file: String,
-        output_file: String,
-        cut_range: CutRange,
-        streams: Vec<StreamMapping>,
-        quality_settings: QualitySettings,
-        container_format: String,
-    ) -> Result<Self, DomainError> {
-        if input_file.is_empty() {
-            return Err(DomainError::BadArgs("Input file cannot be empty".to_string()));
-        }
-        if output_file.is_empty() {
-            return Err(DomainError::BadArgs("Output file cannot be empty".to_string()));
-        }
-        if streams.is_empty() {
-            return Err(DomainError::BadArgs("At least one stream must be mapped".to_string()));
-        }
-        
-        Ok(Self {
-            mode,
-            input_file,
-            output_file,
-            cut_range,
-            streams,
-            quality_settings,
-            container_format,
-        })
     }
 }
 
@@ -628,6 +570,51 @@ impl QualitySettings {
     }
 }
 
+/// Execution plan for video clipping
+#[derive(Debug, Clone)]
+pub struct ExecutionPlan {
+    pub mode: ClippingMode,
+    pub input_file: String,
+    pub output_file: String,
+    pub cut_range: CutRange,
+    pub streams: Vec<StreamMapping>,
+    pub quality_settings: QualitySettings,
+    pub container_format: String,
+}
+
+impl ExecutionPlan {
+    /// Create new execution plan with validation
+    pub fn new(
+        mode: ClippingMode,
+        input_file: String,
+        output_file: String,
+        cut_range: CutRange,
+        streams: Vec<StreamMapping>,
+        quality_settings: QualitySettings,
+        container_format: String,
+    ) -> Result<Self, DomainError> {
+        if input_file.is_empty() {
+            return Err(DomainError::BadArgs("Input file cannot be empty".to_string()));
+        }
+        if output_file.is_empty() {
+            return Err(DomainError::BadArgs("Output file cannot be empty".to_string()));
+        }
+        if streams.is_empty() {
+            return Err(DomainError::BadArgs("At least one stream must be mapped".to_string()));
+        }
+        
+        Ok(Self {
+            mode,
+            input_file,
+            output_file,
+            cut_range,
+            streams,
+            quality_settings,
+            container_format,
+        })
+    }
+}
+
 /// Output report after clipping
 #[derive(Debug, Clone)]
 pub struct OutputReport {
@@ -675,3 +662,6 @@ impl OutputReport {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
