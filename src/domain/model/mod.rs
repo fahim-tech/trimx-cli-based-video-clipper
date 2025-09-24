@@ -499,5 +499,121 @@ impl ClippingMode {
     }
 }
 
+/// Stream mapping for output
+#[derive(Debug, Clone)]
+pub struct StreamMapping {
+    pub input_index: usize,
+    pub output_index: usize,
+    pub copy: bool,
+    pub stream_type: StreamType,
+}
+
+/// Stream type enumeration
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamType {
+    Video,
+    Audio,
+    Subtitle,
+}
+
+impl StreamMapping {
+    /// Create new stream mapping
+    pub fn new(input_index: usize, output_index: usize, copy: bool, stream_type: StreamType) -> Self {
+        Self {
+            input_index,
+            output_index,
+            copy,
+            stream_type,
+        }
+    }
+}
+
+/// Quality settings for encoding
+#[derive(Debug, Clone)]
+pub struct QualitySettings {
+    pub preset: String,
+    pub crf: Option<u8>,
+    pub bitrate: Option<u64>,
+    pub hardware_acceleration: bool,
+}
+
+impl QualitySettings {
+    /// Create new quality settings with validation
+    pub fn new(
+        preset: String,
+        crf: Option<u8>,
+        bitrate: Option<u64>,
+        hardware_acceleration: bool,
+    ) -> Result<Self, DomainError> {
+        if let Some(crf_value) = crf {
+            if crf_value > 51 {
+                return Err(DomainError::BadArgs("CRF value cannot exceed 51".to_string()));
+            }
+        }
+        
+        Ok(Self {
+            preset,
+            crf,
+            bitrate,
+            hardware_acceleration,
+        })
+    }
+    
+    /// Get default quality settings
+    pub fn default() -> Self {
+        Self {
+            preset: "medium".to_string(),
+            crf: Some(18),
+            bitrate: None,
+            hardware_acceleration: false,
+        }
+    }
+}
+
+/// Execution plan for video clipping
+#[derive(Debug, Clone)]
+pub struct ExecutionPlan {
+    pub mode: ClippingMode,
+    pub input_file: String,
+    pub output_file: String,
+    pub cut_range: CutRange,
+    pub streams: Vec<StreamMapping>,
+    pub quality_settings: QualitySettings,
+    pub container_format: String,
+}
+
+impl ExecutionPlan {
+    /// Create new execution plan with validation
+    pub fn new(
+        mode: ClippingMode,
+        input_file: String,
+        output_file: String,
+        cut_range: CutRange,
+        streams: Vec<StreamMapping>,
+        quality_settings: QualitySettings,
+        container_format: String,
+    ) -> Result<Self, DomainError> {
+        if input_file.is_empty() {
+            return Err(DomainError::BadArgs("Input file cannot be empty".to_string()));
+        }
+        if output_file.is_empty() {
+            return Err(DomainError::BadArgs("Output file cannot be empty".to_string()));
+        }
+        if streams.is_empty() {
+            return Err(DomainError::BadArgs("At least one stream must be mapped".to_string()));
+        }
+        
+        Ok(Self {
+            mode,
+            input_file,
+            output_file,
+            cut_range,
+            streams,
+            quality_settings,
+            container_format,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests;
