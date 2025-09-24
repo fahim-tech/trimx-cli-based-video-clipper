@@ -83,5 +83,58 @@ impl ClippingModeSelector {
     }
 }
 
+/// Business rules for keyframe analysis
+pub struct KeyframeAnalyzer;
+
+impl KeyframeAnalyzer {
+    /// Analyze keyframe proximity for copy mode decision
+    pub fn analyze_keyframe_proximity(
+        video_stream: &VideoStreamInfo,
+        cut_range: &CutRange,
+    ) -> KeyframeProximity {
+        let frame_duration = video_stream.frame_duration();
+        let tolerance = frame_duration * 0.5; // 50% of frame duration
+        
+        let start_proximity = Self::calculate_keyframe_distance(
+            cut_range.start.seconds,
+            frame_duration,
+            tolerance,
+        );
+        
+        let end_proximity = Self::calculate_keyframe_distance(
+            cut_range.end.seconds,
+            frame_duration,
+            tolerance,
+        );
+        
+        KeyframeProximity {
+            start_distance: start_proximity,
+            end_distance: end_proximity,
+            is_copy_viable: start_proximity <= tolerance && end_proximity <= tolerance,
+        }
+    }
+    
+    /// Calculate distance to nearest keyframe
+    fn calculate_keyframe_distance(
+        time_seconds: f64,
+        frame_duration: f64,
+        tolerance: f64,
+    ) -> f64 {
+        let frame_position = time_seconds / frame_duration;
+        let fractional_part = frame_position.fract();
+        
+        // Distance to nearest keyframe (assuming keyframes at frame boundaries)
+        fractional_part.min(1.0 - fractional_part) * frame_duration
+    }
+}
+
+/// Keyframe proximity analysis result
+#[derive(Debug, Clone)]
+pub struct KeyframeProximity {
+    pub start_distance: f64,
+    pub end_distance: f64,
+    pub is_copy_viable: bool,
+}
+
 #[cfg(test)]
 mod tests;
