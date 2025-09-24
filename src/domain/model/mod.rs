@@ -417,5 +417,53 @@ impl MediaInfo {
     }
 }
 
+/// Cut range specification
+#[derive(Debug, Clone, PartialEq)]
+pub struct CutRange {
+    pub start: TimeSpec,
+    pub end: TimeSpec,
+}
+
+impl CutRange {
+    /// Create new cut range with validation
+    pub fn new(start: TimeSpec, end: TimeSpec) -> Result<Self, DomainError> {
+        if start.seconds < 0.0 {
+            return Err(DomainError::OutOfRange("Start time cannot be negative".to_string()));
+        }
+        if end.seconds <= start.seconds {
+            return Err(DomainError::OutOfRange("End time must be after start time".to_string()));
+        }
+        
+        Ok(Self { start, end })
+    }
+    
+    /// Get duration of the cut range
+    pub fn duration(&self) -> TimeSpec {
+        TimeSpec::from_seconds(self.end.seconds - self.start.seconds)
+    }
+    
+    /// Validate against media duration
+    pub fn validate_against_duration(&self, media_duration: &TimeSpec) -> Result<(), DomainError> {
+        if self.start.seconds >= media_duration.seconds {
+            return Err(DomainError::OutOfRange(
+                format!("Start time {} exceeds media duration {}", self.start, media_duration)
+            ));
+        }
+        if self.end.seconds > media_duration.seconds {
+            return Err(DomainError::OutOfRange(
+                format!("End time {} exceeds media duration {}", self.end, media_duration)
+            ));
+        }
+        Ok(())
+    }
+    
+    /// Check if range is valid for copy mode (keyframe aligned)
+    pub fn is_keyframe_aligned(&self, frame_duration: f64, tolerance: f64) -> bool {
+        let start_aligned = (self.start.seconds / frame_duration).fract().abs() < tolerance;
+        let end_aligned = (self.end.seconds / frame_duration).fract().abs() < tolerance;
+        start_aligned && end_aligned
+    }
+}
+
 #[cfg(test)]
 mod tests;
