@@ -29,6 +29,8 @@ pub enum DomainError {
     ProbeFail(String),
     /// Out of range error
     OutOfRange(String),
+    /// File system error
+    FsFail(String),
 }
 
 impl fmt::Display for DomainError {
@@ -46,6 +48,7 @@ impl fmt::Display for DomainError {
             DomainError::InternalError(msg) => write!(f, "Internal error: {}", msg),
             DomainError::ProbeFail(msg) => write!(f, "Probe failure: {}", msg),
             DomainError::OutOfRange(msg) => write!(f, "Out of range: {}", msg),
+            DomainError::FsFail(msg) => write!(f, "File system error: {}", msg),
         }
     }
 }
