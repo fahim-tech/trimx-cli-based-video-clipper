@@ -615,5 +615,53 @@ impl ExecutionPlan {
     }
 }
 
+/// Output report after clipping
+#[derive(Debug, Clone)]
+pub struct OutputReport {
+    pub success: bool,
+    pub duration: TimeSpec,
+    pub file_size: u64,
+    pub processing_time: Duration,
+    pub mode_used: ClippingMode,
+    pub warnings: Vec<String>,
+    pub first_pts: Option<i64>,
+    pub last_pts: Option<i64>,
+}
+
+impl OutputReport {
+    /// Create successful output report
+    pub fn success(
+        duration: TimeSpec,
+        file_size: u64,
+        processing_time: Duration,
+        mode_used: ClippingMode,
+    ) -> Self {
+        Self {
+            success: true,
+            duration,
+            file_size,
+            processing_time,
+            mode_used,
+            warnings: Vec::new(),
+            first_pts: None,
+            last_pts: None,
+        }
+    }
+    
+    /// Create failed output report
+    pub fn failure(mode_used: ClippingMode, error_message: String) -> Self {
+        Self {
+            success: false,
+            duration: TimeSpec::from_seconds(0.0),
+            file_size: 0,
+            processing_time: Duration::from_secs(0),
+            mode_used,
+            warnings: vec![error_message],
+            first_pts: None,
+            last_pts: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
