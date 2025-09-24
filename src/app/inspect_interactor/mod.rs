@@ -170,39 +170,7 @@ impl InspectInteractor {
             }
         }
         
-        // Metadata
-        if !response.media_info.metadata.is_empty() {
-            report.push_str("\n=== Metadata ===\n");
-            for (key, value) in &response.media_info.metadata {
-                report.push_str(&format!("{}: {}\n", key, value));
-            }
-        }
-        
         report
-    }
-    
-    /// Generate JSON report
-    pub fn generate_json_report(&self, response: &InspectResponse) -> Result<String, DomainError> {
-        let json_report = serde_json::json!({
-            "file_info": {
-                "format": response.media_info.format,
-                "duration": response.media_info.duration.seconds,
-                "file_size": response.file_metadata.size,
-                "bit_rate": response.media_info.bit_rate
-            },
-            "streams": {
-                "total": response.media_info.total_streams(),
-                "video": response.media_info.video_streams.len(),
-                "audio": response.media_info.audio_streams.len(),
-                "subtitle": response.media_info.subtitle_streams.len()
-            },
-            "detailed_streams": response.detailed_streams,
-            "metadata": response.media_info.metadata,
-            "format_supported": response.format_supported
-        });
-        
-        serde_json::to_string_pretty(&json_report)
-            .map_err(|e| DomainError::BadArgs(format!("Failed to serialize JSON report: {}", e)))
     }
 }
 
