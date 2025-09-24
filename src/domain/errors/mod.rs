@@ -25,6 +25,10 @@ pub enum DomainError {
     ProcessingError(String),
     /// Internal error
     InternalError(String),
+    /// Probe failure
+    ProbeFail(String),
+    /// Out of range error
+    OutOfRange(String),
 }
 
 impl fmt::Display for DomainError {
@@ -40,6 +44,8 @@ impl fmt::Display for DomainError {
             DomainError::ValidationFailed(msg) => write!(f, "Validation failed: {}", msg),
             DomainError::ProcessingError(msg) => write!(f, "Processing error: {}", msg),
             DomainError::InternalError(msg) => write!(f, "Internal error: {}", msg),
+            DomainError::ProbeFail(msg) => write!(f, "Probe failure: {}", msg),
+            DomainError::OutOfRange(msg) => write!(f, "Out of range: {}", msg),
         }
     }
 }

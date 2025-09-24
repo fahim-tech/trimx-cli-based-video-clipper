@@ -319,5 +319,103 @@ impl SubtitleStreamInfo {
     }
 }
 
+/// Complete media file information
+#[derive(Debug, Clone)]
+pub struct MediaInfo {
+    pub duration: TimeSpec,
+    pub video_streams: Vec<VideoStreamInfo>,
+    pub audio_streams: Vec<AudioStreamInfo>,
+    pub subtitle_streams: Vec<SubtitleStreamInfo>,
+    pub format: String,
+    pub file_size: u64,
+    pub bit_rate: Option<u64>,
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+impl MediaInfo {
+    /// Create new media info with validation
+    pub fn new(
+        format: String,
+        file_size: u64,
+        video_streams: Vec<VideoStreamInfo>,
+        audio_streams: Vec<AudioStreamInfo>,
+        subtitle_streams: Vec<SubtitleStreamInfo>,
+    ) -> Result<Self, DomainError> {
+        if file_size == 0 {
+            return Err(DomainError::BadArgs("File size cannot be zero".to_string()));
+        }
+        
+        // Calculate duration from streams
+        let duration = Self::calculate_duration(&video_streams, &audio_streams)?;
+        
+        Ok(Self {
+            duration,
+            video_streams,
+            audio_streams,
+            subtitle_streams,
+            format,
+            file_size,
+            bit_rate: None,
+            metadata: std::collections::HashMap::new(),
+        })
+    }
+    
+    /// Calculate duration from stream information
+    fn calculate_duration(
+        video_streams: &[VideoStreamInfo],
+        audio_streams: &[AudioStreamInfo],
+    ) -> Result<TimeSpec, DomainError> {
+        let mut max_duration = TimeSpec::from_seconds(0.0);
+        
+        // Use video stream duration if available
+        for stream in video_streams {
+            if let Some(duration) = &stream.duration {
+                if duration.seconds > max_duration.seconds {
+                    max_duration = duration.clone();
+                }
+            }
+        }
+        
+        // Fall back to audio stream duration
+        if max_duration.seconds == 0.0 {
+            for stream in audio_streams {
+                if let Some(duration) = &stream.duration {
+                    if duration.seconds > max_duration.seconds {
+                        max_duration = duration.clone();
+                    }
+                }
+            }
+        }
+        
+        if max_duration.seconds == 0.0 {
+            return Err(DomainError::ProbeFail("Could not determine media duration".to_string()));
+        }
+        
+        Ok(max_duration)
+    }
+    
+    /// Get primary video stream (usually the first one)
+    pub fn primary_video_stream(&self) -> Option<&VideoStreamInfo> {
+        self.video_streams.first()
+    }
+    
+    /// Get primary audio stream
+    pub fn primary_audio_stream(&self) -> Option<&AudioStreamInfo> {
+        self.audio_streams.first()
+    }
+    
+    /// Check if all streams support copy mode
+    pub fn all_streams_support_copy(&self) -> bool {
+        self.video_streams.iter().all(|s| s.supports_copy()) &&
+        self.audio_streams.iter().all(|s| s.supports_copy()) &&
+        self.subtitle_streams.iter().all(|s| s.supports_copy())
+    }
+    
+    /// Get total number of streams
+    pub fn total_streams(&self) -> usize {
+        self.video_streams.len() + self.audio_streams.len() + self.subtitle_streams.len()
+    }
+}
+
 #[cfg(test)]
 mod tests;
