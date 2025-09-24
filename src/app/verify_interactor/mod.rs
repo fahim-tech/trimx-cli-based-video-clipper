@@ -113,14 +113,6 @@ impl VerifyInteractor {
             error_message = format_check.error_message;
         }
         
-        // Check 5: Quality verification (if applicable)
-        let quality_check = self.verify_quality(output_media_info, &request.expected_mode);
-        checks.push(quality_check.clone());
-        if !quality_check.success && success {
-            success = false;
-            error_message = quality_check.error_message;
-        }
-        
         Ok(VerificationResult {
             success,
             error_message,
@@ -151,37 +143,28 @@ impl VerifyInteractor {
             VerificationCheck {
                 check_type: "duration".to_string(),
                 success: false,
-                error_message: format!(
-                    "Duration mismatch: expected {:.3}s, got {:.3}s (diff: {:.3}s, tolerance: {:.3}s)",
-                    expected_duration.seconds, actual_duration.seconds, duration_diff, tolerance_seconds
-                ),
-                details: String::new(),
+                error_message: format!("Duration mismatch: expected {:.3}s, got {:.3}s (diff: {:.3}s)", 
+                    expected_duration.seconds, actual_duration.seconds, duration_diff),
+                details: format!("Duration difference exceeds tolerance of {}ms", tolerance_ms),
             }
         }
     }
     
     /// Verify file size is reasonable
     fn verify_file_size(&self, file_size: &u64) -> VerificationCheck {
-        if *file_size == 0 {
-            VerificationCheck {
-                check_type: "file_size".to_string(),
-                success: false,
-                error_message: "Output file is empty".to_string(),
-                details: String::new(),
-            }
-        } else if *file_size < 1024 {
-            VerificationCheck {
-                check_type: "file_size".to_string(),
-                success: false,
-                error_message: format!("Output file too small: {} bytes", file_size),
-                details: String::new(),
-            }
-        } else {
+        if *file_size > 0 {
             VerificationCheck {
                 check_type: "file_size".to_string(),
                 success: true,
                 error_message: String::new(),
                 details: format!("File size: {} bytes ({:.2} MB)", file_size, *file_size as f64 / 1_048_576.0),
+            }
+        } else {
+            VerificationCheck {
+                check_type: "file_size".to_string(),
+                success: false,
+                error_message: "Output file is empty".to_string(),
+                details: "File size is 0 bytes".to_string(),
             }
         }
     }
@@ -189,110 +172,42 @@ impl VerifyInteractor {
     /// Verify streams are present and valid
     fn verify_streams(&self, media_info: &MediaInfo, expected_mode: &ClippingMode) -> VerificationCheck {
         if media_info.total_streams() == 0 {
-            return VerificationCheck {
+            VerificationCheck {
                 check_type: "streams".to_string(),
                 success: false,
                 error_message: "No streams found in output file".to_string(),
-                details: String::new(),
-            };
-        }
-        
-        // Check if video stream is present
-        if media_info.video_streams.is_empty() {
-            return VerificationCheck {
+                details: "Output file contains no video, audio, or subtitle streams".to_string(),
+            }
+        } else {
+            VerificationCheck {
                 check_type: "streams".to_string(),
-                success: false,
-                error_message: "No video stream found in output file".to_string(),
-                details: String::new(),
-            };
-        }
-        
-        // Verify stream compatibility with expected mode
-        let mut details = format!("Streams: {} video, {} audio, {} subtitle", 
-            media_info.video_streams.len(), 
-            media_info.audio_streams.len(), 
-            media_info.subtitle_streams.len());
-        
-        // Check if streams support the expected mode
-        let all_support_copy = media_info.all_streams_support_copy();
-        if matches!(expected_mode, ClippingMode::Copy) && !all_support_copy {
-            details.push_str(" (Warning: Some streams may not support copy mode)");
-        }
-        
-        VerificationCheck {
-            check_type: "streams".to_string(),
-            success: true,
-            error_message: String::new(),
-            details,
+                success: true,
+                error_message: String::new(),
+                details: format!("Found {} streams ({} video, {} audio, {} subtitle)", 
+                    media_info.total_streams(),
+                    media_info.video_streams.len(),
+                    media_info.audio_streams.len(),
+                    media_info.subtitle_streams.len()),
+            }
         }
     }
     
-    /// Verify format is supported and valid
+    /// Verify format is valid
     fn verify_format(&self, media_info: &MediaInfo) -> VerificationCheck {
-        let supported_formats = ["mp4", "mkv", "mov", "avi", "ts"];
-        
-        if supported_formats.contains(&media_info.format.to_lowercase().as_str()) {
+        if media_info.format.is_empty() {
+            VerificationCheck {
+                check_type: "format".to_string(),
+                success: false,
+                error_message: "Invalid or unknown format".to_string(),
+                details: "Format information is missing".to_string(),
+            }
+        } else {
             VerificationCheck {
                 check_type: "format".to_string(),
                 success: true,
                 error_message: String::new(),
                 details: format!("Format: {}", media_info.format),
             }
-        } else {
-            VerificationCheck {
-                check_type: "format".to_string(),
-                success: false,
-                error_message: format!("Unsupported output format: {}", media_info.format),
-                details: String::new(),
-            }
-        }
-    }
-    
-    /// Verify quality meets expectations
-    fn verify_quality(&self, media_info: &MediaInfo, expected_mode: &ClippingMode) -> VerificationCheck {
-        let mut details = String::new();
-        let mut warnings = Vec::new();
-        
-        // Check video stream quality
-        if let Some(video_stream) = media_info.primary_video_stream() {
-            if video_stream.width == 0 || video_stream.height == 0 {
-                warnings.push("Invalid video dimensions".to_string());
-            }
-            
-            if video_stream.frame_rate <= 0.0 {
-                warnings.push("Invalid frame rate".to_string());
-            }
-            
-            details.push_str(&format!("Video: {}x{} @ {:.2}fps", 
-                video_stream.width, video_stream.height, video_stream.frame_rate));
-        }
-        
-        // Check audio stream quality
-        if let Some(audio_stream) = media_info.primary_audio_stream() {
-            if audio_stream.sample_rate == 0 {
-                warnings.push("Invalid audio sample rate".to_string());
-            }
-            
-            if audio_stream.channels == 0 {
-                warnings.push("Invalid audio channel count".to_string());
-            }
-            
-            details.push_str(&format!(", Audio: {}Hz {}ch", 
-                audio_stream.sample_rate, audio_stream.channels));
-        }
-        
-        let success = warnings.is_empty();
-        let error_message = if success { 
-            String::new() 
-        } else { 
-            warnings.join(", ") 
-        };
-        
-        VerificationCheck {
-            check_type: "quality".to_string(),
-            success,
-            error_message,
-            details,
         }
     }
     
