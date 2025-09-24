@@ -1,0 +1,41 @@
+# TrimX CLI Video Clipper
+
+A Windows-native command-line tool for precise video clipping with intelligent lossless stream-copy and fallback re-encoding capabilities.
+
+## Features
+
+- Smart clipping strategy selection (auto/copy/reencode)
+- GOP-spanning method for precise cuts
+- Stream preservation (video, audio, subtitles)
+- Multiple time format support
+- Windows-optimized with long-path support
+
+## Quick Start
+
+```bash
+# Clip a segment from a video file
+clipper.exe clip --in "video.mov" --start 00:10:05.250 --end 00:12:40.000
+
+# Inspect video file information
+clipper.exe inspect --in "video.mov"
+
+# Verify a clipped segment
+clipper.exe verify --in "clipped.mov" --start 00:10:05.250 --end 00:12:40.000
+```
+
+## Development
+
+```bash
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Install locally
+cargo install --path .
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

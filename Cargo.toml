@@ -1,0 +1,81 @@
+[package]
+name = "trimx-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["TrimX Contributors"]
+license = "MIT"
+description = "A Windows-native command-line tool for precise video clipping"
+repository = "https://github.com/yourusername/trimx-cli-based-video-clipper"
+homepage = "https://github.com/yourusername/trimx-cli-based-video-clipper"
+keywords = ["video", "cli", "ffmpeg", "trim", "clip"]
+categories = ["multimedia::video", "command-line-utilities"]
+
+# Binary configuration
+[[bin]]
+name = "clipper"
+path = "src/main.rs"
+
+# Dependencies
+[dependencies]
+# CLI and argument parsing
+clap = { version = "4.4", features = ["derive", "env"] }
+clap-num = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging and output
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# FFmpeg bindings
+ffmpeg-next = "6.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# File system operations
+walkdir = "2.4"
+tempfile = "3.8"
+
+# Windows-specific features
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["fileapi", "winbase", "winnt"] }
+
+# Development dependencies
+[dev-dependencies]
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+criterion = "0.5"
+
+# Benchmark configuration
+[[bench]]
+name = "clipping_benchmarks"
+harness = false
+
+# Build configuration
+[build-dependencies]
+cc = "1.0"
+
+# Profile configurations
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = true
+codegen-units = 1

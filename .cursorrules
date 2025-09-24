@@ -1,0 +1,113 @@
+# TrimX CLI Video Clipper - Cursor Rules
+
+## Project Overview
+TrimX is a Windows-native command-line tool for precise video clipping with intelligent lossless stream-copy and fallback re-encoding capabilities.
+
+## Technology Stack
+- **Language**: Rust
+- **Media Processing**: FFmpeg libraries (libavformat/libavcodec/libavfilter/libswresample)
+- **Target Platform**: Windows 10/11 x64
+- **Distribution**: Single signed .exe with optional MSI installer
+
+## Architecture Principles
+1. **Smart Mode Selection**: Auto-detect optimal clipping strategy (lossless copy vs re-encode)
+2. **GOP-Spanning Method**: Re-encode only necessary leading/trailing GOPs, stream-copy middle segments
+3. **Stream Preservation**: Maintain video, audio, subtitles, and metadata by default
+4. **Deterministic Output**: Same inputs produce identical output bytes
+5. **Error Recovery**: Graceful fallback with actionable error messages
+
+## Code Organization
+```
+src/
+├── cli/           # Command-line interface and argument parsing
+├── probe/         # Media file inspection and validation
+├── planner/       # Cut strategy planning and GOP analysis
+├── engine/        # Core clipping engine (copy/re-encode pipelines)
+├── streams/       # Stream handling and mapping
+├── output/        # Output file writing and verification
+├── error/         # Error handling and categorization
+└── utils/         # Common utilities and helpers
+```
+
+## Development Guidelines
+
+### Rust Best Practices
+- Use `anyhow` for error handling with custom error types
+- Implement `Display` and `Error` traits for all custom errors
+- Use `clap` for CLI argument parsing with derive macros
+- Prefer `tracing` for structured logging
+- Use `serde` for JSON serialization when needed
+- Follow Rust naming conventions (snake_case for functions/variables)
+
+### FFmpeg Integration
+- Use `ffmpeg-next` crate for FFmpeg bindings
+- Always check return codes from FFmpeg functions
+- Implement proper resource cleanup (contexts, packets, frames)
+- Handle timestamp conversion between different timebases
+- Validate stream compatibility before processing
+
+### Performance Considerations
+- Use zero-copy packet passthrough for stream-copy operations
+- Implement bounded memory usage for large GOPs
+- Support hardware acceleration (NVENC/QSV) as optional feature
+- Multi-threaded decode/encode respecting libav thread model
+
+### Error Handling Strategy
+- Categorize errors: input validation, codec support, timestamp range, I/O
+- Provide both human-readable and JSON-structured error output
+- Include recovery hints in error messages
+- Use proper exit codes (0=success, 2=invalid args, 3=probe failure, etc.)
+
+### Testing Requirements
+- Unit tests for all core modules
+- Integration tests for common scenarios (keyframe/non-keyframe cuts)
+- Test matrix covering containers (MP4, MKV, MOV, TS, AVI) and codecs
+- Edge case testing (VFR, rotated videos, long paths, corrupt files)
+
+## CLI Design Principles
+- Consistent command structure: `clipper.exe <command> [options]`
+- Clear, descriptive option names with sensible defaults
+- Support for multiple time formats (HH:MM:SS.ms, MM:SS.ms, seconds)
+- Verbose logging with structured JSON output option
+- Non-interactive by default (use flags for overwrite behavior)
+
+## File Naming Conventions
+- Output files: `{input_basename}_clip_{start}_{end}.{ext}`
+- Use Windows long-path support (`\\?\` prefix when needed)
+- Atomic writes (temp file → rename) for safety
+
+## Security & Privacy
+- No telemetry by default
+- Optional analytics with clear opt-in notice
+- Code signing for Windows distribution
+- Input validation to prevent path traversal attacks
+
+## Documentation Standards
+- Comprehensive doc comments for all public APIs
+- Include examples in documentation
+- Maintain up-to-date README with usage examples
+- Document all CLI options and their behavior
+- Include troubleshooting guide for common issues
+
+## Commit Message Format
+Use conventional commits:
+- `feat:` new features
+- `fix:` bug fixes
+- `docs:` documentation changes
+- `test:` test additions/modifications
+- `refactor:` code refactoring
+- `perf:` performance improvements
+- `ci:` CI/CD changes
+- `build:` build system changes
+
+Example: `feat(cli): add --mode auto option for intelligent clipping strategy`
+
+## Code Review Checklist
+- [ ] Error handling is comprehensive and user-friendly
+- [ ] FFmpeg resources are properly cleaned up
+- [ ] Memory usage is bounded and efficient
+- [ ] Tests cover new functionality and edge cases
+- [ ] Documentation is updated for API changes
+- [ ] CLI help text is clear and accurate
+- [ ] Performance impact is considered
+- [ ] Windows-specific considerations are handled
