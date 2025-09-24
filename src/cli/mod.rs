@@ -3,10 +3,7 @@
 //! This module handles command-line argument parsing and command execution.
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-
-pub mod args;
-pub mod commands;
+use clap::{Parser, Subcommand, Args};
 
 /// TrimX CLI Video Clipper
 ///
@@ -35,9 +32,73 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Extract a segment from a video file
-    Clip(args::ClipArgs),
+    Clip(ClipArgs),
     /// Inspect video file information
-    Inspect(args::InspectArgs),
+    Inspect(InspectArgs),
     /// Verify a clipped segment
-    Verify(args::VerifyArgs),
+    Verify(VerifyArgs),
+}
+
+/// Arguments for clip command
+#[derive(Args)]
+pub struct ClipArgs {
+    /// Input video file
+    #[arg(short, long)]
+    pub input: String,
+    
+    /// Output video file
+    #[arg(short, long)]
+    pub output: String,
+    
+    /// Start time (HH:MM:SS or seconds)
+    #[arg(short, long)]
+    pub start: String,
+    
+    /// End time (HH:MM:SS or seconds)
+    #[arg(short, long)]
+    pub end: String,
+    
+    /// Clipping mode (auto, copy, reencode, hybrid)
+    #[arg(short, long, default_value = "auto")]
+    pub mode: String,
+}
+
+/// Arguments for inspect command
+#[derive(Args)]
+pub struct InspectArgs {
+    /// Input video file
+    #[arg(short, long)]
+    pub input: String,
+    
+    /// Include detailed stream information
+    #[arg(long, default_value = "true")]
+    pub streams: bool,
+    
+    /// Include metadata
+    #[arg(long, default_value = "true")]
+    pub metadata: bool,
+}
+
+/// Arguments for verify command
+#[derive(Args)]
+pub struct VerifyArgs {
+    /// Output video file to verify
+    #[arg(short, long)]
+    pub output: String,
+    
+    /// Expected start time
+    #[arg(short, long)]
+    pub start: String,
+    
+    /// Expected end time
+    #[arg(short, long)]
+    pub end: String,
+    
+    /// Expected mode
+    #[arg(short, long)]
+    pub mode: String,
+    
+    /// Tolerance in milliseconds
+    #[arg(short, long, default_value = "100")]
+    pub tolerance: u32,
 }
