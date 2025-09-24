@@ -166,5 +166,69 @@ impl Timebase {
     }
 }
 
+/// Video stream information
+#[derive(Debug, Clone)]
+pub struct VideoStreamInfo {
+    pub index: usize,
+    pub codec: String,
+    pub width: u32,
+    pub height: u32,
+    pub frame_rate: f64,
+    pub bit_rate: Option<u64>,
+    pub timebase: Timebase,
+    pub pixel_format: Option<String>,
+    pub color_space: Option<String>,
+    pub rotation: Option<f32>,
+    pub duration: Option<TimeSpec>,
+}
+
+impl VideoStreamInfo {
+    /// Create new video stream info with validation
+    pub fn new(
+        index: usize,
+        codec: String,
+        width: u32,
+        height: u32,
+        frame_rate: f64,
+        timebase: Timebase,
+    ) -> Result<Self, DomainError> {
+        if width == 0 || height == 0 {
+            return Err(DomainError::BadArgs("Video dimensions cannot be zero".to_string()));
+        }
+        if frame_rate <= 0.0 {
+            return Err(DomainError::BadArgs("Frame rate must be positive".to_string()));
+        }
+        
+        Ok(Self {
+            index,
+            codec,
+            width,
+            height,
+            frame_rate,
+            bit_rate: None,
+            timebase,
+            pixel_format: None,
+            color_space: None,
+            rotation: None,
+            duration: None,
+        })
+    }
+    
+    /// Get aspect ratio
+    pub fn aspect_ratio(&self) -> f64 {
+        self.width as f64 / self.height as f64
+    }
+    
+    /// Check if codec supports copy mode
+    pub fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "h264" | "hevc" | "vp9" | "av1")
+    }
+    
+    /// Get frame duration in seconds
+    pub fn frame_duration(&self) -> f64 {
+        1.0 / self.frame_rate
+    }
+}
+
 #[cfg(test)]
 mod tests;
