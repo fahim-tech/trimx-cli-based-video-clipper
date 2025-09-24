@@ -230,5 +230,64 @@ impl VideoStreamInfo {
     }
 }
 
+/// Audio stream information
+#[derive(Debug, Clone)]
+pub struct AudioStreamInfo {
+    pub index: usize,
+    pub codec: String,
+    pub sample_rate: u32,
+    pub channels: u32,
+    pub bit_rate: Option<u64>,
+    pub timebase: Timebase,
+    pub language: Option<String>,
+    pub duration: Option<TimeSpec>,
+}
+
+impl AudioStreamInfo {
+    /// Create new audio stream info with validation
+    pub fn new(
+        index: usize,
+        codec: String,
+        sample_rate: u32,
+        channels: u32,
+        timebase: Timebase,
+    ) -> Result<Self, DomainError> {
+        if sample_rate == 0 {
+            return Err(DomainError::BadArgs("Sample rate cannot be zero".to_string()));
+        }
+        if channels == 0 {
+            return Err(DomainError::BadArgs("Channel count cannot be zero".to_string()));
+        }
+        
+        Ok(Self {
+            index,
+            codec,
+            sample_rate,
+            channels,
+            bit_rate: None,
+            timebase,
+            language: None,
+            duration: None,
+        })
+    }
+    
+    /// Check if codec supports copy mode
+    pub fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "aac" | "mp3" | "ac3" | "eac3" | "pcm")
+    }
+    
+    /// Get bytes per sample
+    pub fn bytes_per_sample(&self) -> usize {
+        match self.codec.as_str() {
+            "pcm_s16le" | "pcm_s16be" => 2,
+            "pcm_s24le" | "pcm_s24be" => 3,
+            "pcm_s32le" | "pcm_s32be" => 4,
+            "pcm_f32le" | "pcm_f32be" => 4,
+            "pcm_f64le" | "pcm_f64be" => 8,
+            _ => 2, // Default assumption
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
