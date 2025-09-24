@@ -1,0 +1,65 @@
+# TrimX CLI Video Clipper - Production Configuration Template
+# Copy this file to production.toml and customize for production use
+
+[general]
+name = "TrimX CLI Video Clipper"
+version = "0.1.0"
+description = "A Windows-native command-line tool for precise video clipping"
+
+[logging]
+level = "info"
+format = "json"
+json_output = true
+file_logging = true
+log_file = "logs/trimx.log"
+max_file_size = "50MB"
+max_files = 10
+
+[output]
+default_format = "mp4"
+overwrite_policy = "error"
+atomic_writes = true
+temp_directory = "temp/"
+preserve_metadata = true
+
+[quality]
+default_crf = 23
+default_preset = "medium"
+enable_hardware_acceleration = true
+preferred_hardware = ["nvenc", "qsv", "vaapi"]
+
+[performance]
+max_memory_usage = "4GB"
+thread_count = 0  # 0 = auto-detect
+enable_parallel_processing = true
+buffer_size = "128MB"
+
+[validation]
+strict_mode = true
+validate_input_files = true
+check_codec_support = true
+warn_on_potential_issues = false
+
+[paths]
+config_directory = "config/"
+log_directory = "logs/"
+temp_directory = "temp/"
+cache_directory = "cache/"
+
+[features]
+enable_telemetry = false
+enable_crash_reporting = false
+enable_performance_monitoring = true
+enable_debug_output = false
+
+[security]
+validate_file_paths = true
+prevent_path_traversal = true
+max_input_file_size = "10GB"
+allowed_formats = ["mp4", "mkv", "mov", "avi", "ts", "m4v", "webm"]
+
+[production]
+mock_mode = false
+simulate_processing_delay = false
+processing_delay_ms = 0
+verbose_output = false

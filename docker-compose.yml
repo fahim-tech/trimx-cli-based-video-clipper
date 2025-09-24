@@ -1,0 +1,106 @@
+# TrimX CLI Video Clipper - Docker Compose
+# Development and testing environment
+
+version: '3.8'
+
+services:
+  # Development environment
+  trimx-dev:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    working_dir: /app
+    command: cargo watch -x test
+    profiles:
+      - dev
+
+  # Test environment
+  trimx-test:
+    build:
+      context: .
+      target: test
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+    environment:
+      - RUST_LOG=info
+    working_dir: /app
+    command: cargo test --all-features
+    profiles:
+      - test
+
+  # Coverage environment
+  trimx-coverage:
+    build:
+      context: .
+      target: coverage
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+      - ./coverage:/app/coverage
+    environment:
+      - RUST_LOG=info
+    working_dir: /app
+    command: cargo tarpaulin --out Html --output-dir coverage
+    profiles:
+      - coverage
+
+  # Production build
+  trimx-prod:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+    environment:
+      - RUST_LOG=info
+    working_dir: /app
+    command: cargo build --release
+    profiles:
+      - prod
+
+  # Lint and format
+  trimx-lint:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+    environment:
+      - RUST_LOG=info
+    working_dir: /app
+    command: sh -c "cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings"
+    profiles:
+      - lint
+
+  # Security audit
+  trimx-audit:
+    build:
+      context: .
+      target: builder
+    volumes:
+      - .:/app
+      - cargo-cache:/usr/local/cargo/registry
+    environment:
+      - RUST_LOG=info
+    working_dir: /app
+    command: sh -c "cargo install cargo-audit && cargo audit"
+    profiles:
+      - audit
+
+volumes:
+  cargo-cache:
+    driver: local
+
+# Default profile for development
+profiles:
+  default:
+    - dev

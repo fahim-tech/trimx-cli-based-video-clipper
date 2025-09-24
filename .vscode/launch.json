@@ -1,0 +1,105 @@
+{
+  // TrimX CLI Video Clipper - VS Code Launch Configuration
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug TrimX",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/trimx_cli_based_video_clipper",
+      "args": ["--help"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: build"
+    },
+    {
+      "name": "Debug TrimX - Clip Command",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/trimx_cli_based_video_clipper",
+      "args": [
+        "clip",
+        "--in", "sample video.mp4",
+        "--start", "00:00:10",
+        "--end", "00:00:20",
+        "--verbose"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: build"
+    },
+    {
+      "name": "Debug TrimX - Inspect Command",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/trimx_cli_based_video_clipper",
+      "args": [
+        "inspect",
+        "--in", "sample video.mp4",
+        "--json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: build"
+    },
+    {
+      "name": "Debug TrimX - Verify Command",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/trimx_cli_based_video_clipper",
+      "args": [
+        "verify",
+        "--in", "sample video.mp4",
+        "--start", "00:00:10",
+        "--end", "00:00:20"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: build"
+    },
+    {
+      "name": "Debug Tests",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/deps/trimx_cli_based_video_clipper-*",
+      "args": ["--nocapture"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: test"
+    },
+    {
+      "name": "Debug Integration Tests",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/integration_tests-*",
+      "args": ["--nocapture"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      },
+      "sourceLanguages": ["rust"],
+      "preLaunchTask": "cargo: test"
+    }
+  ]
+}
