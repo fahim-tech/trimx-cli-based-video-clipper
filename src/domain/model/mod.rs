@@ -289,5 +289,35 @@ impl AudioStreamInfo {
     }
 }
 
+/// Subtitle stream information
+#[derive(Debug, Clone)]
+pub struct SubtitleStreamInfo {
+    pub index: usize,
+    pub codec: String,
+    pub language: Option<String>,
+    pub duration: Option<TimeSpec>,
+    pub forced: bool,
+    pub default: bool,
+}
+
+impl SubtitleStreamInfo {
+    /// Create new subtitle stream info
+    pub fn new(index: usize, codec: String) -> Self {
+        Self {
+            index,
+            codec,
+            language: None,
+            duration: None,
+            forced: false,
+            default: false,
+        }
+    }
+    
+    /// Check if subtitle codec supports copy mode
+    pub fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "mov_text" | "srt" | "ass" | "ssa" | "subrip")
+    }
+}
+
 #[cfg(test)]
 mod tests;
