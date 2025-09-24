@@ -8,7 +8,7 @@ A Windows-native command-line tool for precise video clipping with intelligent l
 
 ## 🎯 Overview
 
-TrimX is designed for editors, content creators, QA teams, and researchers who need precise video clipping without the complexity of full video editing suites. It intelligently chooses between lossless stream-copy and precise re-encoding to deliver accurate cuts while maintaining optimal performance.
+TrimX is designed for editors, content creators, QA teams, and researchers who need precise video clipping without the complexity of full video editing suites. Built with a clean hexagonal architecture, it intelligently chooses between lossless stream-copy and precise re-encoding to deliver accurate cuts while maintaining optimal performance.
 
 ### Key Features
 
@@ -18,6 +18,29 @@ TrimX is designed for editors, content creators, QA teams, and researchers who n
 - **Deterministic Output**: Same inputs produce identical output bytes
 - **Multiple Time Formats**: Supports HH:MM:SS.ms, MM:SS.ms, and seconds as float
 - **Windows Optimized**: Native Windows 10/11 x64 support with long-path handling
+- **Clean Architecture**: Hexagonal architecture with clear separation of concerns
+- **Testable Design**: Comprehensive unit and integration test coverage
+
+## 🏗️ Architecture
+
+TrimX follows a clean hexagonal architecture (ports and adapters) pattern, ensuring maintainability, testability, and clear separation of concerns:
+
+### Core Layers
+
+- **Domain Layer**: Pure business logic with models, rules, and use cases
+- **Application Layer**: Use case orchestration through interactors
+- **Infrastructure Layer**: Adapters implementing port interfaces
+- **CLI Layer**: Command-line interface and argument parsing
+
+### Key Components
+
+- **Interactors**: Orchestrate use cases (ClipInteractor, InspectInteractor, VerifyInteractor)
+- **Ports**: Abstract interfaces for external dependencies
+- **Adapters**: Concrete implementations (ProbeLibavAdapter, ExecLibavAdapter, FsWindowsAdapter)
+- **Domain Models**: Core business entities (TimeSpec, CutRange, MediaInfo, etc.)
+- **Business Rules**: Domain logic (ClippingModeSelector, KeyframeAnalyzer, etc.)
+
+This architecture enables easy testing, dependency injection, and future extensibility.
 
 ## 🚀 Quick Start
 
