@@ -228,5 +228,42 @@ impl StreamCopySupport for SubtitleStreamInfo {
     }
 }
 
+/// Business rules for output validation
+pub struct OutputValidator;
+
+impl OutputValidator {
+    /// Validate output against expected parameters
+    pub fn validate_output(
+        output_report: &OutputReport,
+        expected_duration: &TimeSpec,
+        tolerance_ms: u32,
+    ) -> ValidationResult {
+        let duration_diff = (output_report.duration.seconds - expected_duration.seconds).abs();
+        let tolerance_seconds = tolerance_ms as f64 / 1000.0;
+        
+        let duration_valid = duration_diff <= tolerance_seconds;
+        let success_valid = output_report.success;
+        let size_valid = output_report.file_size > 0;
+        
+        ValidationResult {
+            duration_valid,
+            success_valid,
+            size_valid,
+            duration_difference_ms: (duration_diff * 1000.0) as u32,
+            overall_valid: duration_valid && success_valid && size_valid,
+        }
+    }
+}
+
+/// Output validation result
+#[derive(Debug, Clone)]
+pub struct ValidationResult {
+    pub duration_valid: bool,
+    pub success_valid: bool,
+    pub size_valid: bool,
+    pub duration_difference_ms: u32,
+    pub overall_valid: bool,
+}
+
 #[cfg(test)]
 mod tests;
