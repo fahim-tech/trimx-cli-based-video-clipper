@@ -465,5 +465,39 @@ impl CutRange {
     }
 }
 
+/// Clipping mode enumeration
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClippingMode {
+    Auto,
+    Copy,
+    Reencode,
+    Hybrid,
+}
+
+impl ClippingMode {
+    /// Parse mode from string
+    pub fn parse(mode_str: &str) -> Result<Self, DomainError> {
+        match mode_str.to_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "copy" => Ok(Self::Copy),
+            "reencode" => Ok(Self::Reencode),
+            "hybrid" => Ok(Self::Hybrid),
+            _ => Err(DomainError::BadArgs(
+                format!("Invalid clipping mode: {}. Valid modes: auto, copy, reencode, hybrid", mode_str)
+            )),
+        }
+    }
+    
+    /// Get description of the mode
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::Auto => "Automatically select best mode based on content",
+            Self::Copy => "Fast lossless stream copy (approximate cuts)",
+            Self::Reencode => "Precise frame-accurate cuts with re-encoding",
+            Self::Hybrid => "GOP-spanning method (re-encode head/tail, copy middle)",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
