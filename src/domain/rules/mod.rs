@@ -136,5 +136,97 @@ pub struct KeyframeProximity {
     pub is_copy_viable: bool,
 }
 
+/// Business rules for stream mapping
+pub struct StreamMapper;
+
+impl StreamMapper {
+    /// Create optimal stream mappings for the execution plan
+    pub fn create_stream_mappings(
+        media_info: &MediaInfo,
+        mode: &ClippingMode,
+    ) -> Result<Vec<StreamMapping>, DomainError> {
+        let mut mappings = Vec::new();
+        let mut output_index = 0;
+        
+        // Map video streams
+        for (input_index, video_stream) in media_info.video_streams.iter().enumerate() {
+            let copy = Self::should_copy_stream(video_stream, mode);
+            mappings.push(StreamMapping::new(
+                input_index,
+                output_index,
+                copy,
+                StreamType::Video,
+            ));
+            output_index += 1;
+        }
+        
+        // Map audio streams
+        for (input_index, audio_stream) in media_info.audio_streams.iter().enumerate() {
+            let copy = Self::should_copy_stream(audio_stream, mode);
+            mappings.push(StreamMapping::new(
+                input_index,
+                output_index,
+                copy,
+                StreamType::Audio,
+            ));
+            output_index += 1;
+        }
+        
+        // Map subtitle streams
+        for (input_index, subtitle_stream) in media_info.subtitle_streams.iter().enumerate() {
+            let copy = Self::should_copy_stream(subtitle_stream, mode);
+            mappings.push(StreamMapping::new(
+                input_index,
+                output_index,
+                copy,
+                StreamType::Subtitle,
+            ));
+            output_index += 1;
+        }
+        
+        if mappings.is_empty() {
+            return Err(DomainError::BadArgs("No streams found to map".to_string()));
+        }
+        
+        Ok(mappings)
+    }
+    
+    /// Determine if a stream should be copied based on mode and codec support
+    fn should_copy_stream<T>(stream: &T, mode: &ClippingMode) -> bool 
+    where
+        T: StreamCopySupport,
+    {
+        match mode {
+            ClippingMode::Copy => stream.supports_copy(),
+            ClippingMode::Hybrid => stream.supports_copy(),
+            ClippingMode::Reencode => false, // Always re-encode in re-encode mode
+            ClippingMode::Auto => stream.supports_copy(), // Should be resolved before this
+        }
+    }
+}
+
+/// Trait for streams that support copy mode
+pub trait StreamCopySupport {
+    fn supports_copy(&self) -> bool;
+}
+
+impl StreamCopySupport for VideoStreamInfo {
+    fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "h264" | "hevc" | "vp9" | "av1")
+    }
+}
+
+impl StreamCopySupport for AudioStreamInfo {
+    fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "aac" | "mp3" | "ac3" | "eac3" | "pcm")
+    }
+}
+
+impl StreamCopySupport for SubtitleStreamInfo {
+    fn supports_copy(&self) -> bool {
+        matches!(self.codec.as_str(), "mov_text" | "srt" | "ass" | "ssa" | "subrip")
+    }
+}
+
 #[cfg(test)]
 mod tests;
