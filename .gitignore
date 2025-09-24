@@ -114,3 +114,10 @@ criterion/
 
 # Documentation
 book/
+
+# Cursor rules and markdown documentation (keep local but exclude from git)
+.cursorrules
+*.md
+ADRs/
+.github/ISSUE_TEMPLATE/
+.github/pull_request_template.md
