@@ -137,9 +137,13 @@ impl ExecutePort for LibavExecutionAdapter {
         let start_ts = (plan.cut_range.start.to_seconds() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
         let end_ts = (plan.cut_range.end.to_seconds() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
 
+        println!("🔍 Analyzing video structure...");
+        
         // Seek to start position
         ictx.seek(start_ts, start_ts..end_ts)
             .map_err(|e| DomainError::ProcessingError(format!("Failed to seek: {}", e)))?;
+            
+        println!("📊 Processing video packets...");
 
         let mut first_pts = None;
         let mut last_pts = None;
@@ -150,6 +154,11 @@ impl ExecutePort for LibavExecutionAdapter {
         const MAX_PACKETS: usize = 10000; // Prevent memory overflow for very long videos
         
         for (stream, packet) in ictx.packets() {
+            // Show progress every 1000 packets
+            if packet_count % 1000 == 0 && packet_count > 0 {
+                print!(".");
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            }
             // Memory management: limit packet processing
             if packet_count > MAX_PACKETS {
                 // For very long videos, implement chunked processing
@@ -193,6 +202,8 @@ impl ExecutePort for LibavExecutionAdapter {
         // Write trailer
         octx.write_trailer()
             .map_err(|e| DomainError::ProcessingError(format!("Failed to write trailer: {}", e)))?;
+            
+        println!("\n💾 Writing output file...");
 
         let processing_time = start_time.elapsed();
         let file_size = std::fs::metadata(&plan.output_file)
