@@ -14,19 +14,16 @@ pub enum ClippingStrategy {
     /// Full re-encoding (slow, exact)
     Reencode,
     /// Hybrid approach (GOP-spanning method)
-    Hybrid {
-        /// Re-encode leading segment
-        leading_reencode: bool,
-        /// Stream copy middle segments
-        middle_copy: bool,
-        /// Re-encode trailing segment
-        trailing_reencode: bool,
-    },
+    Hybrid,
+    /// Auto-select optimal strategy
+    Auto,
 }
 
 /// Cut plan information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CutPlan {
+    /// Input file path
+    pub input_path: String,
     /// Selected clipping strategy
     pub strategy: ClippingStrategy,
     /// Start time in seconds
