@@ -71,14 +71,23 @@ impl LibavProbeAdapter {
             30.0 // Default fallback
         };
         
-        crate::domain::model::VideoStreamInfo::new(
+        let mut video_info = crate::domain::model::VideoStreamInfo::new(
             index,
             codec,
             width,
             height,
             frame_rate,
             timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create VideoStreamInfo: {}", e)))
+        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create VideoStreamInfo: {}", e)))?;
+        
+        // Set stream duration if available
+        let duration = stream.duration();
+        if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
+            let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
+            video_info.duration = Some(crate::domain::model::TimeSpec::from_seconds(stream_duration));
+        }
+        
+        Ok(video_info)
     }
 
     /// Extract audio stream information
@@ -100,13 +109,22 @@ impl LibavProbeAdapter {
         let sample_rate = 48000u32; // Default fallback
         let channels = 2u32; // Default fallback
         
-        crate::domain::model::AudioStreamInfo::new(
+        let mut audio_info = crate::domain::model::AudioStreamInfo::new(
             index,
             codec,
             sample_rate,
             channels,
             timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create AudioStreamInfo: {}", e)))
+        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create AudioStreamInfo: {}", e)))?;
+        
+        // Set stream duration if available
+        let duration = stream.duration();
+        if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
+            let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
+            audio_info.duration = Some(crate::domain::model::TimeSpec::from_seconds(stream_duration));
+        }
+        
+        Ok(audio_info)
     }
 
     /// Extract subtitle stream information
@@ -157,7 +175,22 @@ impl ProbePort for LibavProbeAdapter {
 
         // Get format information
         let container = ictx.format().name().to_string();
-        let duration = ictx.duration() as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64;
+        let duration = if ictx.duration() != ffmpeg_next::ffi::AV_NOPTS_VALUE {
+            ictx.duration() as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64
+        } else {
+            // If container duration is not available, calculate from streams
+            let mut max_duration = 0.0;
+            for stream in ictx.streams() {
+                let duration = stream.duration();
+                if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
+                    let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
+                    if stream_duration > max_duration {
+                        max_duration = stream_duration;
+                    }
+                }
+            }
+            max_duration
+        };
 
         // Extract actual stream information
         let mut video_streams: Vec<crate::domain::model::VideoStreamInfo> = Vec::new();
