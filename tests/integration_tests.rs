@@ -1,21 +1,20 @@
 use trimx_cli::*;
-use async_trait::async_trait;
-use std::sync::Arc;
-use tokio;
+use std::path::Path;
+use std::time::Instant;
 
 #[test]
 fn test_time_spec_parsing() {
     // Test seconds format
-    assert_eq!(TimeSpec::parse("90.5").unwrap().seconds, 90.5);
+    assert_eq!(TimeSpec::parse("90.5").unwrap().as_seconds(), 90.5);
     
     // Test MM:SS format
-    assert_eq!(TimeSpec::parse("01:30").unwrap().seconds, 90.0);
+    assert_eq!(TimeSpec::parse("01:30").unwrap().as_seconds(), 90.0);
     
     // Test MM:SS.ms format
-    assert_eq!(TimeSpec::parse("01:30.500").unwrap().seconds, 90.5);
+    assert_eq!(TimeSpec::parse("01:30.500").unwrap().as_seconds(), 90.5);
     
     // Test HH:MM:SS.ms format
-    assert_eq!(TimeSpec::parse("00:01:30.500").unwrap().seconds, 90.5);
+    assert_eq!(TimeSpec::parse("00:01:30.500").unwrap().as_seconds(), 90.5);
     
     // Test invalid formats
     assert!(TimeSpec::parse("invalid").is_err());
@@ -169,7 +168,7 @@ fn test_output_report_creation() {
     };
     
     assert!(report.success);
-    assert_eq!(report.duration.seconds, 10.0);
+    assert_eq!(report.duration.as_seconds(), 10.0);
     assert_eq!(report.file_size, 1024000);
     assert_eq!(report.processing_time, processing_time);
     assert_eq!(report.mode_used, ClippingMode::Copy);
@@ -191,324 +190,224 @@ fn test_output_report_creation() {
     assert_eq!(failure_report.warnings[0], "Test error");
 }
 
-#[tokio::test]
-async fn test_probe_adapter_integration() {
-    // Create a temporary test file
-    let temp_file = std::env::temp_dir().join("test_video.mp4");
-    std::fs::write(&temp_file, b"fake video content for testing").unwrap();
+#[test]
+fn test_video_inspector() {
+    let inspector = VideoInspector::new();
     
-    let probe_adapter = LibavProbeAdapter::new().unwrap();
+    // Test filename generation
+    let filename = inspector.generate_filename("test.mp4", 10.5, 20.3).unwrap();
+    assert!(filename.contains("test"));
+    assert!(filename.contains("clip"));
+    assert!(filename.contains("mp4"));
     
-    // Test format support check
-    let is_supported = probe_adapter.is_format_supported(temp_file.to_str().unwrap()).await.unwrap();
-    // This might be false if FFmpeg can't handle the fake file, which is expected
-    
-    // Test file validation
-    let is_valid = probe_adapter.validate_file(temp_file.to_str().unwrap()).await.unwrap();
-    // This should be true since the file exists and is readable
-    
-    // Clean up
-    std::fs::remove_file(&temp_file).unwrap();
-    
-    assert!(is_valid);
+    // Test file validation with non-existent file
+    assert!(inspector.validate_file("non_existent_file.mp4").is_err());
 }
 
-#[tokio::test]
-async fn test_exec_adapter_integration() {
-    let exec_adapter = LibavExecutionAdapter::new().unwrap();
+#[test]
+fn test_stream_processor() {
+    let processor = StreamProcessor::new();
     
-    // Test hardware acceleration detection
-    let hw_available = exec_adapter.is_hardware_acceleration_available().await.unwrap();
-    // This might be true or false depending on system capabilities
+    // Test thread count management
+    assert!(processor.get_thread_count() > 0);
+    assert!(processor.get_thread_count() <= 16);
     
-    // Test codec detection
-    let video_codecs = exec_adapter.get_available_video_codecs().await.unwrap();
-    let audio_codecs = exec_adapter.get_available_audio_codecs().await.unwrap();
-    
-    // Should have at least some codecs available
-    assert!(!video_codecs.is_empty() || !audio_codecs.is_empty());
-    
-    // Test execution capabilities
-    let capabilities = exec_adapter.test_execution_capabilities().await.unwrap();
-    assert!(capabilities.supports_copy_mode || capabilities.supports_reencode_mode);
+    // Test buffer size management
+    assert!(processor.get_buffer_size() >= 1024);
 }
 
-#[tokio::test]
-async fn test_fs_adapter_integration() {
-    let fs_adapter = FsWindowsAdapter::new().unwrap();
+#[test]
+fn test_output_writer() {
+    let writer = OutputWriter::new();
     
-    // Create a temporary test file
-    let temp_file = std::env::temp_dir().join("trimx_test_file.txt");
-    std::fs::write(&temp_file, b"test content").unwrap();
+    // Test filename generation
+    let filename = writer.generate_filename("input.mp4", 5.0, 15.0).unwrap();
+    assert!(filename.contains("input"));
+    assert!(filename.contains("clip"));
+    assert!(filename.contains("mp4"));
     
-    // Test file operations
-    assert!(fs_adapter.file_exists(temp_file.to_str().unwrap()).await.unwrap());
-    
-    let file_size = fs_adapter.get_file_size(temp_file.to_str().unwrap()).await.unwrap();
-    assert_eq!(file_size, 12); // "test content".len()
-    
-    // Test path validation
-    assert!(fs_adapter.validate_path(temp_file.to_str().unwrap()).await.unwrap());
-    assert!(!fs_adapter.validate_path("../../../etc/passwd").await.unwrap()); // Path traversal
-    assert!(!fs_adapter.validate_path("CON").await.unwrap()); // Reserved name
-    
-    // Test directory operations
-    let temp_dir = std::env::temp_dir().join("trimx_test_dir");
-    fs_adapter.create_directory(temp_dir.to_str().unwrap()).await.unwrap();
-    assert!(fs_adapter.directory_exists(temp_dir.to_str().unwrap()).await.unwrap());
-    
-    // Test write permissions
-    let can_write = fs_adapter.can_write_to_directory(temp_dir.to_str().unwrap()).await.unwrap();
-    assert!(can_write);
-    
-    // Clean up
-    std::fs::remove_file(&temp_file).unwrap();
-    std::fs::remove_dir(&temp_dir).unwrap();
+    // Test file existence check
+    assert!(!writer.file_exists("non_existent_file.mp4"));
 }
 
-#[tokio::test]
-async fn test_config_adapter_integration() {
-    let config_adapter = TomlConfigAdapter::new().unwrap();
+#[test]
+fn test_gop_analyzer() {
+    let analyzer = GOPAnalyzer::new();
     
-    // Test default configuration
-    let log_level = config_adapter.get_config("log_level").await.unwrap();
-    assert!(log_level.is_some());
-    
-    let default_crf = config_adapter.get_config_or_default("crf", "18").await.unwrap();
-    assert_eq!(default_crf, "18");
-    
-    // Test configuration validation
-    config_adapter.validate_config().await.unwrap();
-    
-    // Test configuration keys
-    let keys = config_adapter.get_all_config_keys().await.unwrap();
-    assert!(!keys.is_empty());
-    assert!(keys.contains(&"log_level".to_string()));
+    // Test with non-existent file (should fail gracefully)
+    let result = analyzer.analyze_gop("non_existent_file.mp4", 0);
+    assert!(result.is_err());
 }
 
-#[tokio::test]
-async fn test_log_adapter_integration() {
-    let log_adapter = TracingLogAdapter::new().unwrap();
+#[test]
+fn test_strategy_planner() {
+    let planner = StrategyPlanner::new();
     
-    // Test basic logging
-    log_adapter.info("Test info message").await;
-    log_adapter.warn("Test warning message").await;
-    log_adapter.error("Test error message").await;
-    log_adapter.debug("Test debug message").await;
-    
-    // Test structured logging
-    let log_event = LogEvent {
-        level: LogLevel::Info,
-        message: "Test structured log".to_string(),
-        context: std::collections::HashMap::from([
-            ("test_key".to_string(), "test_value".to_string()),
-        ]),
+    // Test with mock media info
+    let media_info = MediaInfo {
+        file_path: "test.mp4".to_string(),
+        format: "mp4".to_string(),
+        duration: 30.0,
+        file_size: 1000000,
+        bit_rate: Some(1000000),
+        metadata: std::collections::HashMap::new(),
+        video_streams: vec![],
+        audio_streams: vec![],
+        subtitle_streams: vec![],
     };
     
-    log_adapter.log_event(&log_event).await;
-    
-    // Test log level management
-    let current_level = log_adapter.get_log_level().await;
-    log_adapter.set_log_level(LogLevel::Debug).await;
-    log_adapter.set_json_output(true).await;
+    // Test strategy planning with non-existent file (should fail gracefully)
+    let result = planner.plan_strategy("non_existent_file.mp4", &media_info, 5.0, 15.0, "auto");
+    assert!(result.is_err());
 }
 
-#[tokio::test]
-async fn test_clip_interactor_integration() {
-    // Create adapters
-    let probe_adapter = Box::new(ProbeLibavAdapter::new().unwrap());
-    let exec_adapter = Box::new(ExecLibavAdapter::new().unwrap());
-    let fs_adapter = Box::new(FsWindowsAdapter::new().unwrap());
-    let config_adapter = Box::new(TomlConfigAdapter::new().unwrap());
-    let log_adapter = Box::new(TracingLogAdapter::new().unwrap());
+#[test]
+fn test_video_clipper() {
+    let clipper = VideoClipper::new();
     
-    // Create interactor
-    let interactor = ClipInteractor::new(
-        probe_adapter,
-        exec_adapter,
-        fs_adapter,
-        config_adapter,
-        log_adapter,
-    );
-    
-    // Create a temporary test file
-    let temp_input = std::env::temp_dir().join("test_input.mp4");
-    let temp_output = std::env::temp_dir().join("test_output.mp4");
-    std::fs::write(&temp_input, b"fake video content").unwrap();
-    
-    // Create clip request
-    let cut_range = CutRange::new(
-        TimeSpec::from_seconds(1.0),
-        TimeSpec::from_seconds(5.0),
-    ).unwrap();
-    
-    let request = ClipRequest {
-        input_file: temp_input.to_str().unwrap().to_string(),
-        output_file: temp_output.to_str().unwrap().to_string(),
-        cut_range,
-        mode: ClippingMode::Copy,
-        quality_settings: None,
+    // Test time estimation
+    let config = EngineConfig {
+        input_path: "test.mp4".to_string(),
+        output_path: "output.mp4".to_string(),
+        start_time: 5.0,
+        end_time: 15.0,
+        video_codec: "h264".to_string(),
+        audio_codec: None,
+        crf: 18,
+        preset: "medium".to_string(),
+        no_audio: false,
+        no_subs: false,
     };
     
-    // Execute clip operation
-    let result = interactor.execute(request).await;
-    
-    // The operation might fail due to invalid video content, but should not panic
-    match result {
-        Ok(response) => {
-            assert!(!response.output_file.is_empty());
+    let plan = CutPlan {
+        input_path: "test.mp4".to_string(),
+        strategy: ClippingStrategy::Copy,
+        start_time: 5.0,
+        end_time: 15.0,
+        keyframe_info: KeyframeInfo {
+            gop_size: 30.0,
+            keyframe_positions: vec![],
+            is_keyframe_aligned: true,
         },
-        Err(e) => {
-            // Expected for fake video content
-            println!("Expected error with fake video content: {}", e);
-        }
-    }
-    
-    // Clean up
-    let _ = std::fs::remove_file(&temp_input);
-    let _ = std::fs::remove_file(&temp_output);
-}
-
-#[tokio::test]
-async fn test_inspect_interactor_integration() {
-    // Create adapters
-    let probe_adapter = Box::new(ProbeLibavAdapter::new().unwrap());
-    let fs_adapter = Box::new(FsWindowsAdapter::new().unwrap());
-    let log_adapter = Box::new(TracingLogAdapter::new().unwrap());
-    
-    // Create interactor
-    let interactor = InspectInteractor::new(
-        probe_adapter,
-        fs_adapter,
-        log_adapter,
-    );
-    
-    // Create a temporary test file
-    let temp_file = std::env::temp_dir().join("test_inspect.mp4");
-    std::fs::write(&temp_file, b"fake video content for inspection").unwrap();
-    
-    // Create inspect request
-    let request = InspectRequest {
-        input_file: temp_file.to_str().unwrap().to_string(),
-        include_streams: true,
-        include_metadata: true,
+        stream_mapping: StreamMapping {
+            video: None,
+            audio: vec![],
+            subtitles: vec![],
+        },
     };
     
-    // Execute inspect operation
-    let result = interactor.execute(request).await;
-    
-    // The operation might fail due to invalid video content, but should not panic
-    match result {
-        Ok(response) => {
-            assert!(response.success || response.error_message.is_some());
-        },
-        Err(e) => {
-            // Expected for fake video content
-            println!("Expected error with fake video content: {}", e);
-        }
-    }
-    
-    // Clean up
-    let _ = std::fs::remove_file(&temp_file);
+    // Test time estimation
+    let estimated_time = clipper.estimate_time(&config, &plan);
+    assert!(estimated_time.is_ok());
+    assert!(estimated_time.unwrap().as_secs() > 0);
 }
 
-#[tokio::test]
-async fn test_real_video_inspection() {
+#[test]
+fn test_clip_verifier() {
+    let verifier = ClipVerifier::new();
+    
+    // Test verification with non-existent file (should fail gracefully)
+    let result = verifier.verify("non_existent_file.mp4", 5.0, 15.0);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_real_video_inspection() {
     // Test with the actual sample video file
     let sample_video = "sample video.mp4";
     
     // Skip test if sample video doesn't exist
-    if !std::path::Path::new(sample_video).exists() {
+    if !Path::new(sample_video).exists() {
         println!("Skipping real video test - sample video not found");
         return;
     }
     
-    let probe_adapter = LibavProbeAdapter::new().unwrap();
+    let inspector = VideoInspector::new();
     
     // Test real video inspection
-    let media_info = probe_adapter.probe_media_file(sample_video).await.unwrap();
+    let media_info = inspector.inspect(sample_video).unwrap();
     
     // Verify we got meaningful data
-    assert!(media_info.duration.seconds > 0.0);
+    assert!(media_info.duration > 0.0);
     assert!(!media_info.video_streams.is_empty() || !media_info.audio_streams.is_empty());
     
-    // Test format support
-    let is_supported = probe_adapter.is_format_supported(sample_video).await.unwrap();
-    assert!(is_supported);
-    
     // Test file validation
-    let is_valid = probe_adapter.validate_file(sample_video).await.unwrap();
+    let is_valid = inspector.validate_file(sample_video).unwrap();
     assert!(is_valid);
     
     println!("Real video test passed - Duration: {}s, Video streams: {}, Audio streams: {}", 
-             media_info.duration.seconds, 
+             media_info.duration, 
              media_info.video_streams.len(), 
              media_info.audio_streams.len());
 }
 
-#[tokio::test]
-async fn test_real_video_clipping() {
+#[test]
+fn test_real_video_clipping() {
     // Test with the actual sample video file
     let sample_video = "sample video.mp4";
     let output_video = "test_clip_output.mp4";
     
     // Skip test if sample video doesn't exist
-    if !std::path::Path::new(sample_video).exists() {
+    if !Path::new(sample_video).exists() {
         println!("Skipping real video clipping test - sample video not found");
         return;
     }
     
-    // Create adapters
-    let probe_adapter = Box::new(ProbeLibavAdapter::new().unwrap());
-    let exec_adapter = Box::new(ExecLibavAdapter::new().unwrap());
-    let fs_adapter = Box::new(FsWindowsAdapter::new().unwrap());
-    let config_adapter = Box::new(TomlConfigAdapter::new().unwrap());
-    let log_adapter = Box::new(TracingLogAdapter::new().unwrap());
-    
-    // Create interactor
-    let interactor = ClipInteractor::new(
-        probe_adapter,
-        exec_adapter,
-        fs_adapter,
-        config_adapter,
-        log_adapter,
-    );
+    let inspector = VideoInspector::new();
+    let clipper = VideoClipper::new();
     
     // First, probe the video to get its duration
-    let media_info = interactor.probe_port.probe_media_file(sample_video).await.unwrap();
-    let video_duration = media_info.duration.seconds;
+    let media_info = inspector.inspect(sample_video).unwrap();
+    let video_duration = media_info.duration;
     
     // Create a clip request for a small portion of the video
     let start_time = 1.0;
     let end_time = (start_time + 2.0_f64).min(video_duration - 1.0); // 2 seconds or until end
     
-    let cut_range = CutRange::new(
-        TimeSpec::from_seconds(start_time),
-        TimeSpec::from_seconds(end_time),
-    ).unwrap();
+    let config = EngineConfig {
+        input_path: sample_video.to_string(),
+        output_path: output_video.to_string(),
+        start_time,
+        end_time,
+        video_codec: "h264".to_string(),
+        audio_codec: None,
+        crf: 18,
+        preset: "medium".to_string(),
+        no_audio: false,
+        no_subs: false,
+    };
     
-    let request = ClipRequest {
-        input_file: sample_video.to_string(),
-        output_file: output_video.to_string(),
-        cut_range,
-        mode: ClippingMode::Copy,
-        quality_settings: None,
+    let plan = CutPlan {
+        input_path: sample_video.to_string(),
+        strategy: ClippingStrategy::Copy,
+        start_time,
+        end_time,
+        keyframe_info: KeyframeInfo {
+            gop_size: 30.0,
+            keyframe_positions: vec![],
+            is_keyframe_aligned: true,
+        },
+        stream_mapping: StreamMapping {
+            video: None,
+            audio: vec![],
+            subtitles: vec![],
+        },
     };
     
     // Execute clip operation
-    let result = interactor.execute(request).await;
+    let result = clipper.clip(config, plan);
     
     match result {
-        Ok(response) => {
+        Ok(progress) => {
             // Verify output file was created
-            assert!(std::path::Path::new(&response.output_file).exists());
+            assert!(Path::new(output_video).exists());
             
             // Verify output file has reasonable size
-            let output_size = std::fs::metadata(&response.output_file).unwrap().len();
+            let output_size = std::fs::metadata(output_video).unwrap().len();
             assert!(output_size > 0);
             
             println!("Real video clipping test passed - Output: {}, Size: {} bytes", 
-                     response.output_file, output_size);
+                     output_video, output_size);
         },
         Err(e) => {
             panic!("Real video clipping failed: {}", e);
@@ -519,77 +418,58 @@ async fn test_real_video_clipping() {
     let _ = std::fs::remove_file(output_video);
 }
 
-#[tokio::test]
-async fn test_hardware_acceleration_detection() {
-    let exec_adapter = LibavExecutionAdapter::new().unwrap();
-    
-    // Test hardware acceleration detection
-    let hw_available = exec_adapter.is_hardware_acceleration_available().await.unwrap();
-    println!("Hardware acceleration available: {}", hw_available);
-    
-    // Test specific acceleration types
-    let acceleration_types = exec_adapter.get_available_hardware_acceleration().await.unwrap();
-    println!("Available acceleration types: {:?}", acceleration_types);
-    
-    // Test codec detection with hardware acceleration
-    let video_codecs = exec_adapter.get_available_video_codecs().await.unwrap();
-    let hardware_codecs: Vec<_> = video_codecs.iter()
-        .filter(|codec| codec.is_hardware_accelerated)
-        .collect();
-    
-    println!("Hardware-accelerated codecs: {}", hardware_codecs.len());
-    for codec in &hardware_codecs {
-        println!("  - {}: {}", codec.name, codec.long_name);
-    }
-    
-    // Test execution capabilities
-    let capabilities = exec_adapter.test_execution_capabilities().await.unwrap();
-    assert!(capabilities.supports_copy_mode);
-    assert!(capabilities.supports_reencode_mode);
-    assert!(capabilities.max_concurrent_operations > 0);
-    
-    println!("Execution capabilities: {:?}", capabilities);
-}
-
-#[tokio::test]
-async fn test_performance_benchmarks() {
+#[test]
+fn test_performance_benchmarks() {
     let sample_video = "sample video.mp4";
     
     // Skip test if sample video doesn't exist
-    if !std::path::Path::new(sample_video).exists() {
+    if !Path::new(sample_video).exists() {
         println!("Skipping performance test - sample video not found");
         return;
     }
     
-    let exec_adapter = LibavExecutionAdapter::new().unwrap();
+    let clipper = VideoClipper::new();
     
-    // Test execution capabilities
-    let capabilities = exec_adapter.test_execution_capabilities().await.unwrap();
+    // Benchmark copy mode performance
+    let start_time = Instant::now();
     
-    // Benchmark different modes
-    let start_time = std::time::Instant::now();
+    let config = EngineConfig {
+        input_path: sample_video.to_string(),
+        output_path: "benchmark_copy.mp4".to_string(),
+        start_time: 1.0,
+        end_time: 3.0,
+        video_codec: "h264".to_string(),
+        audio_codec: None,
+        crf: 18,
+        preset: "medium".to_string(),
+        no_audio: false,
+        no_subs: false,
+    };
     
-    // Test copy mode performance
-    let copy_plan = ExecutionPlan::new(
-        ClippingMode::Copy,
-        sample_video.to_string(),
-        "benchmark_copy.mp4".to_string(),
-        CutRange::new(
-            TimeSpec::from_seconds(1.0),
-            TimeSpec::from_seconds(3.0),
-        ).unwrap(),
-        vec![],
-        QualitySettings::default(),
-        "mp4".to_string(),
-    ).unwrap();
+    let plan = CutPlan {
+        input_path: sample_video.to_string(),
+        strategy: ClippingStrategy::Copy,
+        start_time: 1.0,
+        end_time: 3.0,
+        keyframe_info: KeyframeInfo {
+            gop_size: 30.0,
+            keyframe_positions: vec![],
+            is_keyframe_aligned: true,
+        },
+        stream_mapping: StreamMapping {
+            video: None,
+            audio: vec![],
+            subtitles: vec![],
+        },
+    };
     
-    let copy_result = exec_adapter.execute_plan(&copy_plan).await;
+    let copy_result = clipper.clip(config, plan);
     let copy_duration = start_time.elapsed();
     
     match copy_result {
-        Ok(report) => {
+        Ok(progress) => {
             println!("Copy mode benchmark: {}ms, Success: {}", 
-                     copy_duration.as_millis(), report.success);
+                     copy_duration.as_millis(), true);
         },
         Err(e) => {
             println!("Copy mode benchmark failed: {}", e);
@@ -600,28 +480,45 @@ async fn test_performance_benchmarks() {
     let _ = std::fs::remove_file("benchmark_copy.mp4");
     
     // Test reencode mode performance
-    let reencode_start = std::time::Instant::now();
+    let reencode_start = Instant::now();
     
-    let reencode_plan = ExecutionPlan::new(
-        ClippingMode::Reencode,
-        sample_video.to_string(),
-        "benchmark_reencode.mp4".to_string(),
-        CutRange::new(
-            TimeSpec::from_seconds(1.0),
-            TimeSpec::from_seconds(3.0),
-        ).unwrap(),
-        vec![],
-        QualitySettings::default(),
-        "mp4".to_string(),
-    ).unwrap();
+    let reencode_config = EngineConfig {
+        input_path: sample_video.to_string(),
+        output_path: "benchmark_reencode.mp4".to_string(),
+        start_time: 1.0,
+        end_time: 3.0,
+        video_codec: "h264".to_string(),
+        audio_codec: None,
+        crf: 18,
+        preset: "medium".to_string(),
+        no_audio: false,
+        no_subs: false,
+    };
     
-    let reencode_result = exec_adapter.execute_plan(&reencode_plan).await;
+    let reencode_plan = CutPlan {
+        input_path: sample_video.to_string(),
+        strategy: ClippingStrategy::Reencode,
+        start_time: 1.0,
+        end_time: 3.0,
+        keyframe_info: KeyframeInfo {
+            gop_size: 30.0,
+            keyframe_positions: vec![],
+            is_keyframe_aligned: false,
+        },
+        stream_mapping: StreamMapping {
+            video: None,
+            audio: vec![],
+            subtitles: vec![],
+        },
+    };
+    
+    let reencode_result = clipper.clip(reencode_config, reencode_plan);
     let reencode_duration = reencode_start.elapsed();
     
     match reencode_result {
-        Ok(report) => {
+        Ok(progress) => {
             println!("Reencode mode benchmark: {}ms, Success: {}", 
-                     reencode_duration.as_millis(), report.success);
+                     reencode_duration.as_millis(), true);
         },
         Err(e) => {
             println!("Reencode mode benchmark failed: {}", e);
@@ -632,4 +529,72 @@ async fn test_performance_benchmarks() {
     let _ = std::fs::remove_file("benchmark_reencode.mp4");
     
     println!("Performance test completed");
+}
+
+#[test]
+fn test_error_handling() {
+    // Test various error conditions
+    
+    // Test invalid time range
+    let start = TimeSpec::from_seconds(20.0);
+    let end = TimeSpec::from_seconds(10.0);
+    assert!(CutRange::new(start, end).is_err());
+    
+    // Test invalid quality settings
+    assert!(QualitySettings::new(
+        "invalid".to_string(),
+        Some(100), // Invalid CRF
+        Some(0),   // Invalid bitrate
+        false,
+    ).is_err());
+    
+    // Test invalid clipping mode
+    assert!(ClippingMode::parse("invalid").is_err());
+}
+
+#[test]
+fn test_cli_commands() {
+    // Test CLI command argument parsing
+    use crate::cli::args::*;
+    
+    // Test clip command args
+    let clip_args = ClipArgs {
+        input: "test.mp4".to_string(),
+        start: "10.5".to_string(),
+        end: "20.3".to_string(),
+        output: None,
+        mode: "auto".to_string(),
+        codec: None,
+        crf: None,
+        preset: None,
+        no_audio: false,
+        no_subs: false,
+        verify: false,
+    };
+    
+    assert_eq!(clip_args.input, "test.mp4");
+    assert_eq!(clip_args.start, "10.5");
+    assert_eq!(clip_args.end, "20.3");
+    assert_eq!(clip_args.mode, "auto");
+    
+    // Test inspect command args
+    let inspect_args = InspectArgs {
+        input: "test.mp4".to_string(),
+        json: false,
+    };
+    
+    assert_eq!(inspect_args.input, "test.mp4");
+    assert!(!inspect_args.json);
+    
+    // Test verify command args
+    let verify_args = VerifyArgs {
+        input: "test.mp4".to_string(),
+        start: "10.5".to_string(),
+        end: "20.3".to_string(),
+        json: false,
+    };
+    
+    assert_eq!(verify_args.input, "test.mp4");
+    assert_eq!(verify_args.start, "10.5");
+    assert_eq!(verify_args.end, "20.3");
 }
