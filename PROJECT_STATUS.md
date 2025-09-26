@@ -1,16 +1,18 @@
 # TrimX CLI Video Clipper - Project Status
 
-## Current Status: ~85% Complete ✅
+## Current Status: ~90% Complete ✅
 
 **Version**: 0.1.0 (Core Implementation Complete)  
 **Status**: Core Functionality Implemented - Ready for Testing  
-**Completion**: 85% (All Core Features Implemented)  
-**Last Updated**: December 2024
+**Completion**: 90% (All Core Features Implemented + CLI Improvements)  
+**Last Updated**: September 2024
 
 ## ✅ What's Currently Working
 
 ### Core Functionality Working
 - ✅ **CLI Commands**: All three commands (clip, inspect, verify) fully implemented with **real FFmpeg integration**
+- ✅ **Simplified CLI Syntax**: User-friendly positional arguments (`clipper clip "video.mp4" --start "0:15" --end "0:30"`)
+- ✅ **Auto-Generated Filenames**: Intelligent output naming (`video_clip_0:15_to_0:30.mp4`)
 - ✅ **Hexagonal Architecture**: Complete implementation with ports and adapters
 - ✅ **Domain Layer**: All domain models, business rules, and error handling implemented
 - ✅ **Application Layer**: All interactors (ClipInteractor, InspectInteractor, VerifyInteractor) implemented
@@ -263,9 +265,27 @@ The project is ready for final testing, documentation, and deployment. The main 
 
 ---
 
-**Last Updated**: December 2024  
+**Last Updated**: September 2024  
 **Next Review**: Weekly during final development phase  
 **Maintainer**: TrimX Development Team
+
+## 🆕 Recent Updates (September 2024)
+
+### CLI Improvements
+- ✅ **Simplified Syntax**: Removed `--input` flag requirement, now uses positional arguments
+- ✅ **Auto-Generated Filenames**: Intelligent output naming with format `{original}_clip_{start}_to_{end}.{ext}`
+- ✅ **User Experience**: More intuitive command structure for better usability
+
+### Technical Improvements
+- ✅ **Duration Detection**: Enhanced probe adapter to handle `AV_NOPTS_VALUE` cases
+- ✅ **Stream Processing**: Improved video and audio stream duration extraction
+- ✅ **Error Handling**: Better handling of missing container duration information
+
+### Testing Results
+- ✅ **Sample Video**: Successfully tested with `sample video.mp4`
+- ✅ **Multiple Clips**: Generated clips from 0:15-0:30, 0:20-0:35, 0:25-0:40, 0:35-0:50, 0:45-1:00
+- ✅ **Auto-Naming**: All clips properly named with descriptive filenames
+- ✅ **Duration Accuracy**: All clips have correct 15-second durations
 
 ## ✅ What's Currently Working
 

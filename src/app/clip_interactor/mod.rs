@@ -108,10 +108,10 @@ impl ClipInteractor {
         mode: ClippingMode
     ) -> Result<ExecutionPlan, DomainError> {
         // Generate output file path if not provided
-        let output_file = if request.output_file.is_empty() {
-            self.generate_output_filename(&request.input_file, &request.cut_range)?
+        let output_file = if let Some(output) = request.output_file {
+            output
         } else {
-            request.output_file
+            self.generate_output_filename(&request.input_file, &request.cut_range)?
         };
         
         // Check if output file already exists
@@ -161,10 +161,25 @@ impl ClipInteractor {
             .map(|ext| format!(".{}", ext.to_string_lossy()))
             .unwrap_or_default();
         
-        let start_str = format!("{:.1}", cut_range.start.seconds);
-        let end_str = format!("{:.1}", cut_range.end.seconds);
+        // Format time as user-friendly format (0:15, 0:30, etc.)
+        let start_str = self.format_time_for_filename(cut_range.start.seconds);
+        let end_str = self.format_time_for_filename(cut_range.end.seconds);
         
-        Ok(format!("{}_clip_{}_{}{}", stem, start_str, end_str, extension))
+        Ok(format!("{}_clip_{}_to_{}{}", stem, start_str, end_str, extension))
+    }
+    
+    /// Format time for filename (e.g., 0:15, 1:30, 1:05:30)
+    fn format_time_for_filename(&self, seconds: f64) -> String {
+        let total_seconds = seconds as u64;
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let secs = total_seconds % 60;
+        
+        if hours > 0 {
+            format!("{}:{:02}:{:02}", hours, minutes, secs)
+        } else {
+            format!("{}:{:02}", minutes, secs)
+        }
     }
     
     /// Determine container format for output
@@ -178,7 +193,7 @@ impl ClipInteractor {
 #[derive(Debug, Clone)]
 pub struct ClipRequest {
     pub input_file: String,
-    pub output_file: String,
+    pub output_file: Option<String>,
     pub cut_range: CutRange,
     pub mode: ClippingMode,
     pub quality_settings: Option<QualitySettings>,
@@ -188,7 +203,7 @@ impl ClipRequest {
     /// Create new clip request with validation
     pub fn new(
         input_file: String,
-        output_file: String,
+        output_file: Option<String>,
         cut_range: CutRange,
         mode: ClippingMode,
     ) -> Result<Self, DomainError> {
@@ -208,7 +223,7 @@ impl ClipRequest {
     /// Create new clip request with quality settings
     pub fn with_quality_settings(
         input_file: String,
-        output_file: String,
+        output_file: Option<String>,
         cut_range: CutRange,
         mode: ClippingMode,
         quality_settings: QualitySettings,

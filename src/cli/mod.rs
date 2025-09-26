@@ -42,12 +42,8 @@ pub enum Commands {
 #[derive(Args)]
 pub struct ClipArgs {
     /// Input video file
-    #[arg(short, long)]
+    #[arg(value_name = "FILE")]
     pub input: String,
-    
-    /// Output video file
-    #[arg(short, long)]
-    pub output: String,
     
     /// Start time (HH:MM:SS or seconds)
     #[arg(short, long)]
@@ -56,6 +52,10 @@ pub struct ClipArgs {
     /// End time (HH:MM:SS or seconds)
     #[arg(short, long)]
     pub end: String,
+    
+    /// Output video file (optional - auto-generated if not provided)
+    #[arg(short, long)]
+    pub output: Option<String>,
     
     /// Clipping mode (auto, copy, reencode, hybrid)
     #[arg(short, long, default_value = "auto")]
@@ -66,7 +66,7 @@ pub struct ClipArgs {
 #[derive(Args)]
 pub struct InspectArgs {
     /// Input video file
-    #[arg(short, long)]
+    #[arg(value_name = "FILE")]
     pub input: String,
     
     /// Include detailed stream information
