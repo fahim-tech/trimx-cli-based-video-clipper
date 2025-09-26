@@ -1,6 +1,5 @@
 // TOML config adapter - Configuration management using TOML files
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
 use crate::ports::*;
 use async_trait::async_trait;

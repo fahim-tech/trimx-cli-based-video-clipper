@@ -1,10 +1,10 @@
 //! Cut strategy planning and GOP analysis module
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod strategy;
 pub mod gop;
+pub mod keyframe_analyzer;
 
 /// Clipping strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]

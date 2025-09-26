@@ -5,4 +5,3 @@ pub mod model;
 pub mod rules;
 pub mod usecases;
 
-pub use errors::*;

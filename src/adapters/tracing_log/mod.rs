@@ -1,10 +1,8 @@
 // Tracing log adapter - Structured logging using tracing crate
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
 use crate::ports::*;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use tracing::{info, warn, error, debug, trace};
 
 /// Tracing log adapter

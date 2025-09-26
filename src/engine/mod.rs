@@ -1,12 +1,20 @@
 //! Core clipping engine module
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod clipper;
 pub mod copy;
 pub mod reencode;
 pub mod hybrid;
+pub mod progress;
+
+// Re-export the clipper types
+pub use copy::StreamCopyClipper;
+pub use reencode::ReencodeClipper;
+pub use hybrid::HybridClipper;
+
+// Re-export progress types
+pub use progress::{ProgressCallback, ProgressTracker, ProgressInfo, ProgressPhase, ProgressMetrics, ConsoleProgressCallback, JsonProgressCallback, NoOpProgressCallback};
 
 /// Clipping engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

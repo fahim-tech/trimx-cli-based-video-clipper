@@ -1,10 +1,11 @@
 //! Stream handling and mapping module
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod mapper;
 pub mod processor;
+pub mod audio_mapper;
+pub mod subtitle_processor;
 
 /// Stream mapping configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

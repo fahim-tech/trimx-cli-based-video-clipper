@@ -3,7 +3,6 @@
 //! This module provides direct FFmpeg integration for video processing operations.
 
 use async_trait::async_trait;
-use std::path::Path;
 use std::time::Instant;
 
 use crate::domain::errors::DomainError;
@@ -118,10 +117,16 @@ impl ExecutePort for LibavExecutionAdapter {
 
         // Copy streams
         for (index, stream) in ictx.streams().enumerate() {
-            let mut out_stream = octx.add_stream(stream.parameters().id())
+            // Find the encoder for the input codec
+            let codec_id = stream.parameters().id();
+            let encoder = ffmpeg_next::codec::encoder::find(codec_id)
+                .ok_or_else(|| DomainError::ProcessingError(format!("No encoder found for codec: {:?}", codec_id)))?;
+            
+            let mut out_stream = octx.add_stream(encoder)
                 .map_err(|e| DomainError::ProcessingError(format!("Failed to add stream: {}", e)))?;
             
             out_stream.set_parameters(stream.parameters());
+            out_stream.set_time_base(stream.time_base());
         }
 
         // Write header
@@ -155,21 +160,29 @@ impl ExecutePort for LibavExecutionAdapter {
             let pts = packet.pts().unwrap_or(0);
             let dts = packet.dts().unwrap_or(0);
             
-            // Check if packet is within range
-            if pts >= start_ts && pts <= end_ts {
+            // Convert packet timestamps to AV_TIME_BASE for comparison
+            let stream_tb = stream.time_base();
+            let pts_av_timebase = (pts as f64 * stream_tb.numerator() as f64 / stream_tb.denominator() as f64 * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
+            let dts_av_timebase = (dts as f64 * stream_tb.numerator() as f64 / stream_tb.denominator() as f64 * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
+            
+            // Check if packet is within range using AV_TIME_BASE timestamps
+            if pts_av_timebase >= start_ts && pts_av_timebase <= end_ts {
                 if first_pts.is_none() {
-                    first_pts = Some(pts);
+                    first_pts = Some(pts_av_timebase);
                 }
-                last_pts = Some(pts);
+                last_pts = Some(pts_av_timebase);
                 
-                // Adjust timestamps
+                // Adjust timestamps - convert back to stream timebase
                 let mut out_packet = packet.clone();
-                out_packet.set_pts(Some(pts - start_ts));
-                out_packet.set_dts(Some(dts - start_ts));
+                let adjusted_pts = ((pts_av_timebase - start_ts) as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64 * stream_tb.denominator() as f64 / stream_tb.numerator() as f64) as i64;
+                let adjusted_dts = ((dts_av_timebase - start_ts) as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64 * stream_tb.denominator() as f64 / stream_tb.numerator() as f64) as i64;
                 
-                // TODO: Implement packet writing
-                // octx.write_packet(&out_packet)
-                //     .map_err(|e| DomainError::ProcessingError(format!("Failed to write packet: {}", e)))?;
+                out_packet.set_pts(Some(adjusted_pts));
+                out_packet.set_dts(Some(adjusted_dts));
+                
+                // Write packet to output using interleaved method
+                out_packet.write_interleaved(&mut octx)
+                    .map_err(|e| DomainError::ProcessingError(format!("Failed to write packet: {}", e)))?;
                 
                 total_size += packet.size() as u64;
             }

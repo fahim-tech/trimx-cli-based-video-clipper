@@ -32,9 +32,7 @@ mod ports;
 use cli::{Cli, Commands, ClipArgs, InspectArgs, VerifyArgs};
 use domain::model::*;
 use domain::errors::*;
-use app::*;
 use adapters::*;
-use ports::*;
 use crate::app::clip_interactor::{ClipRequest, ClipInteractor};
 use crate::app::inspect_interactor::InspectInteractor;
 use crate::app::verify_interactor::{VerifyRequest, VerifyInteractor};
@@ -204,7 +202,7 @@ fn execute_inspect_command(args: InspectArgs) -> Result<()> {
         
         if result.success {
             info!("Inspect operation completed successfully");
-            info!("Format: {}", result.media_info.format);
+            info!("Format: {}", result.media_info.container);
             info!("Duration: {}", result.media_info.duration);
             info!("File size: {} bytes", result.media_info.file_size);
             info!("Streams: {} total", result.media_info.total_streams());

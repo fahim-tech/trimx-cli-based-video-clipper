@@ -1,7 +1,7 @@
 //! Main video clipper implementation
 
 use std::time::{Duration, Instant};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 
 use crate::engine::{EngineConfig, ClippingProgress, ClippingPhase, StreamCopyClipper, ReencodeClipper, HybridClipper};
 use crate::planner::{CutPlan, ClippingStrategy};
@@ -103,7 +103,7 @@ impl VideoClipper {
 
         // Update progress based on result
         match result {
-            Ok(()) => {
+            Ok(_progress_result) => {
                 let elapsed = start_time.elapsed();
                 progress.phase = ClippingPhase::Completed;
                 progress.progress = 100.0;
@@ -130,7 +130,7 @@ impl VideoClipper {
     /// Estimate clipping time based on strategy and file size
     pub fn estimate_time(&self, config: &EngineConfig, plan: &CutPlan) -> TrimXResult<Duration> {
         // Get file size for estimation
-        let file_size = std::fs::metadata(&config.input_path)
+        let _file_size = std::fs::metadata(&config.input_path)
             .map_err(|e| TrimXError::ClippingError {
                 message: format!("Failed to get file size: {}", e),
             })?
@@ -207,7 +207,7 @@ impl VideoClipper {
     }
 
     /// Check if the cut points are likely to align with keyframes
-    fn is_likely_keyframe_aligned(&self, config: &EngineConfig, plan: &CutPlan) -> bool {
+    fn is_likely_keyframe_aligned(&self, config: &EngineConfig, _plan: &CutPlan) -> bool {
         // This is a simplified heuristic
         // In a real implementation, we would analyze the actual keyframe positions
         

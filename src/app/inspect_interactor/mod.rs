@@ -28,7 +28,7 @@ impl InspectInteractor {
     /// Execute media file inspection
     pub async fn execute(&self, request: InspectRequest) -> Result<InspectResponse, DomainError> {
         // Log start of operation
-        self.log_port.info(&format!("Starting media file inspection for: {}", request.input_file));
+        let _ = self.log_port.info(&format!("Starting media file inspection for: {}", request.input_file));
         
         // Validate input file
         if !self.fs_port.file_exists(&request.input_file).await? {
@@ -40,12 +40,12 @@ impl InspectInteractor {
         
         // Probe media file
         let media_info = self.probe_port.probe_media(&request.input_file).await?;
-        self.log_port.info(&format!("Media file probed successfully: {} streams", media_info.total_streams()));
+        let _ = self.log_port.info(&format!("Media file probed successfully: {} streams", media_info.total_streams()));
         
         // Additional stream information could be gathered here if needed
         
         // Log completion
-        self.log_port.info("Media file inspection completed successfully");
+        let _ = self.log_port.info("Media file inspection completed successfully");
         
         Ok(InspectResponse::success(media_info))
     }

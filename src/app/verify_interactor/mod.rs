@@ -2,7 +2,6 @@
 
 use crate::domain::model::*;
 use crate::domain::errors::*;
-use crate::domain::rules::*;
 use crate::ports::*;
 
 /// Interactor for output verification use case
@@ -29,7 +28,7 @@ impl VerifyInteractor {
     /// Execute output verification
     pub async fn execute(&self, request: VerifyRequest) -> Result<VerifyResponse, DomainError> {
         // Log start of operation
-        self.log_port.info(&format!("Starting output verification for: {}", request.output_file));
+        let _ = self.log_port.info(&format!("Starting output verification for: {}", request.output_file));
         
         // Validate output file exists
         if !self.fs_port.file_exists(&request.output_file).await? {
@@ -38,7 +37,7 @@ impl VerifyInteractor {
         
         // Probe output file
         let output_media_info = self.probe_port.probe_media(&request.output_file).await?;
-        self.log_port.info(&format!("Output file probed: duration {}, {} streams", 
+        let _ = self.log_port.info(&format!("Output file probed: duration {}, {} streams", 
             output_media_info.duration, output_media_info.total_streams()));
         
         // Get file metadata
@@ -53,9 +52,9 @@ impl VerifyInteractor {
         
         // Log completion
         if verification_result.success {
-            self.log_port.info("Output verification completed successfully");
+            let _ = self.log_port.info("Output verification completed successfully");
         } else {
-            self.log_port.warn(&format!("Output verification failed: {}", verification_result.error_message));
+            let _ = self.log_port.warn(&format!("Output verification failed: {}", verification_result.error_message));
         }
         
         Ok(VerifyResponse {
@@ -195,7 +194,7 @@ impl VerifyInteractor {
     
     /// Verify format is valid
     fn verify_format(&self, media_info: &MediaInfo) -> VerificationCheck {
-        if media_info.format.is_empty() {
+        if media_info.container.is_empty() {
             VerificationCheck {
                 check_type: "format".to_string(),
                 success: false,
@@ -207,7 +206,7 @@ impl VerifyInteractor {
                 check_type: "format".to_string(),
                 success: true,
                 error_message: String::new(),
-                details: format!("Format: {}", media_info.format),
+                details: format!("Format: {}", media_info.container),
             }
         }
     }

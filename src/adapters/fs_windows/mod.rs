@@ -1,12 +1,10 @@
 // Windows filesystem adapter - File system operations for Windows
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
 use crate::ports::*;
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::time::SystemTime;
 
 /// Windows filesystem adapter
 pub struct FsWindowsAdapter {

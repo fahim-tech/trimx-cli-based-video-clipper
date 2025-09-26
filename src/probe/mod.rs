@@ -1,6 +1,5 @@
 //! Media file inspection and validation module
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod inspector;
@@ -23,6 +22,33 @@ pub struct MediaInfo {
     pub container: String,
     /// File size in bytes
     pub file_size: u64,
+}
+
+impl MediaInfo {
+    /// Create new media info
+    pub fn new(
+        path: String,
+        container: String,
+        file_size: u64,
+        video_streams: Vec<VideoStreamInfo>,
+        audio_streams: Vec<AudioStreamInfo>,
+        subtitle_streams: Vec<SubtitleStreamInfo>,
+    ) -> Self {
+        Self {
+            path,
+            duration: 0.0, // Placeholder
+            video_streams,
+            audio_streams,
+            subtitle_streams,
+            container,
+            file_size,
+        }
+    }
+
+    /// Get total number of streams
+    pub fn total_streams(&self) -> usize {
+        self.video_streams.len() + self.audio_streams.len() + self.subtitle_streams.len()
+    }
 }
 
 /// Video stream information

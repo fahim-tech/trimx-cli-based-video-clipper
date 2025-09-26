@@ -59,7 +59,7 @@ impl ClippingModeSelector {
         }
         
         // Container format should support copy operations
-        Self::container_supports_copy(&media_info.format)
+        Self::container_supports_copy(&media_info.container)
     }
     
     /// Check if hybrid mode is viable

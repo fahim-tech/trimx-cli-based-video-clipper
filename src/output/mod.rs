@@ -1,6 +1,5 @@
 //! Output file writing and verification module
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod writer;
@@ -49,4 +48,27 @@ pub struct VerificationResult {
     pub stream_count_match: bool,
     /// Error message if verification failed
     pub error: Option<String>,
+    /// Overall verification score
+    pub overall_score: f64,
+    /// Individual verification checks
+    pub checks: Vec<VerificationCheck>,
+    /// Error message
+    pub error_message: Option<String>,
+}
+
+/// Individual verification check
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationCheck {
+    /// Type of check
+    pub check_type: String,
+    /// Check details
+    pub details: String,
+    /// Check passed
+    pub success: bool,
+    /// Check score
+    pub score: f64,
+    /// Check weight
+    pub weight: f64,
+    /// Error message if check failed
+    pub error_message: Option<String>,
 }

@@ -214,6 +214,7 @@ pub struct VideoStreamInfo {
     pub color_space: Option<String>,
     pub rotation: Option<f32>,
     pub duration: Option<TimeSpec>,
+    pub keyframe_interval: Option<f64>,
 }
 
 impl VideoStreamInfo {
@@ -245,6 +246,7 @@ impl VideoStreamInfo {
             color_space: None,
             rotation: None,
             duration: None,
+            keyframe_interval: None,
         })
     }
     
@@ -275,6 +277,8 @@ pub struct AudioStreamInfo {
     pub timebase: Timebase,
     pub language: Option<String>,
     pub duration: Option<TimeSpec>,
+    pub sample_format: Option<String>,
+    pub channel_layout: Option<String>,
 }
 
 impl AudioStreamInfo {
@@ -302,6 +306,8 @@ impl AudioStreamInfo {
             timebase,
             language: None,
             duration: None,
+            sample_format: None,
+            channel_layout: None,
         })
     }
     
@@ -332,6 +338,7 @@ pub struct SubtitleStreamInfo {
     pub duration: Option<TimeSpec>,
     pub forced: bool,
     pub default: bool,
+    pub timebase: Timebase,
 }
 
 impl SubtitleStreamInfo {
@@ -344,6 +351,7 @@ impl SubtitleStreamInfo {
             duration: None,
             forced: false,
             default: false,
+            timebase: Timebase::av_time_base(),
         }
     }
     
@@ -356,11 +364,12 @@ impl SubtitleStreamInfo {
 /// Complete media file information
 #[derive(Debug, Clone)]
 pub struct MediaInfo {
+    pub path: String,
     pub duration: TimeSpec,
     pub video_streams: Vec<VideoStreamInfo>,
     pub audio_streams: Vec<AudioStreamInfo>,
     pub subtitle_streams: Vec<SubtitleStreamInfo>,
-    pub format: String,
+    pub container: String,
     pub file_size: u64,
     pub bit_rate: Option<u64>,
     pub metadata: std::collections::HashMap<String, String>,
@@ -369,7 +378,8 @@ pub struct MediaInfo {
 impl MediaInfo {
     /// Create new media info with validation
     pub fn new(
-        format: String,
+        path: String,
+        container: String,
         file_size: u64,
         video_streams: Vec<VideoStreamInfo>,
         audio_streams: Vec<AudioStreamInfo>,
@@ -383,11 +393,12 @@ impl MediaInfo {
         let duration = Self::calculate_duration(&video_streams, &audio_streams)?;
         
         Ok(Self {
+            path,
             duration,
             video_streams,
             audio_streams,
             subtitle_streams,
-            format,
+            container,
             file_size,
             bit_rate: None,
             metadata: std::collections::HashMap::new(),
@@ -752,6 +763,7 @@ impl InspectResponse {
         Self {
             success: false,
             media_info: MediaInfo::new(
+                "unknown".to_string(),
                 "unknown".to_string(),
                 0,
                 Vec::new(),

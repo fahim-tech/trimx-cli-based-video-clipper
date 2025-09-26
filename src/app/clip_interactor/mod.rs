@@ -35,7 +35,7 @@ impl ClipInteractor {
     /// Execute video clipping
     pub async fn execute(&self, request: ClipRequest) -> Result<ClipResponse, DomainError> {
         // Log start of operation
-        self.log_port.info(&format!("Starting video clipping operation for file: {}", request.input_file));
+        let _ = self.log_port.info(&format!("Starting video clipping operation for file: {}", request.input_file));
         
         // Validate input file
         if !self.fs_port.file_exists(&request.input_file).await? {
@@ -44,7 +44,7 @@ impl ClipInteractor {
         
         // Probe media file
         let media_info = self.probe_port.probe_media(&request.input_file).await?;
-        self.log_port.info(&format!("Media file probed: {} streams, duration: {}", 
+        let _ = self.log_port.info(&format!("Media file probed: {} streams, duration: {}", 
             media_info.total_streams(), media_info.duration));
         
         // Validate cut range
@@ -53,7 +53,7 @@ impl ClipInteractor {
         // Select optimal clipping mode
         let mode = request.mode.clone();
         let selected_mode = ClippingModeSelector::select_mode(&media_info, &request.cut_range, mode)?;
-        self.log_port.info(&format!("Selected clipping mode: {:?}", selected_mode));
+        let _ = self.log_port.info(&format!("Selected clipping mode: {:?}", selected_mode));
         
         // Create execution plan
         let plan = self.create_execution_plan(request, &media_info, selected_mode).await?;
@@ -63,9 +63,9 @@ impl ClipInteractor {
         
         // Log completion
         if result.success {
-            self.log_port.info(&format!("Video clipping completed successfully. Output: {}", plan.output_file));
+            let _ = self.log_port.info(&format!("Video clipping completed successfully. Output: {}", plan.output_file));
         } else {
-            self.log_port.error("Video clipping failed");
+            let _ = self.log_port.error("Video clipping failed");
         }
         
         Ok(ClipResponse {
@@ -147,7 +147,7 @@ impl ClipInteractor {
             container_format,
         )?;
         
-        self.log_port.debug(&format!("Created execution plan: {:?}", plan));
+        let _ = self.log_port.debug(&format!("Created execution plan: {:?}", plan));
         Ok(plan)
     }
     
@@ -170,7 +170,7 @@ impl ClipInteractor {
     /// Determine container format for output
     fn determine_container_format(&self, input_file: &str, media_info: &MediaInfo) -> Result<String, DomainError> {
         // Use same format as input for now
-        Ok(media_info.format.clone())
+        Ok(media_info.container.clone())
     }
 }
 
