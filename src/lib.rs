@@ -18,7 +18,7 @@ pub use probe::{MediaInfo, VideoStreamInfo, AudioStreamInfo, SubtitleStreamInfo}
 pub use planner::{CutPlan, ClippingStrategy, KeyframeInfo, StreamMapping};
 pub use engine::{EngineConfig, ClippingProgress, ClippingPhase};
 pub use output::{OutputConfig, OverwritePolicy, VerificationResult};
-pub use utils::{Utils, TimeParser, PathUtils};
+pub use utils::{Utils, time::TimeParser, path::PathUtils};
 
 /// Initialize TrimX library
 pub fn init() -> TrimXResult<()> {

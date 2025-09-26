@@ -2,18 +2,42 @@
 
 use std::time::Duration;
 use std::fmt;
+
+/// Memory usage statistics
+#[derive(Debug, Clone)]
+pub struct MemoryUsage {
+    pub used_memory: u64,
+    pub available_memory: u64,
+    pub peak_memory: u64,
+}
+use std::ops::Add;
 use crate::domain::errors::DomainError;
 
 /// Time specification with precision - represents time in seconds with fractional precision
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct TimeSpec {
     pub seconds: f64,
+}
+
+impl std::ops::Sub for TimeSpec {
+    type Output = TimeSpec;
+    
+    fn sub(self, other: TimeSpec) -> TimeSpec {
+        TimeSpec {
+            seconds: self.seconds - other.seconds,
+        }
+    }
 }
 
 impl TimeSpec {
     /// Create a new TimeSpec from seconds
     pub fn from_seconds(seconds: f64) -> Self {
         Self { seconds }
+    }
+    
+    /// Convert to seconds
+    pub fn to_seconds(&self) -> f64 {
+        self.seconds
     }
     
     /// Create a new TimeSpec from hours, minutes, seconds, milliseconds
@@ -103,6 +127,16 @@ impl TimeSpec {
 impl fmt::Display for TimeSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.format_hms())
+    }
+}
+
+impl Add for TimeSpec {
+    type Output = TimeSpec;
+    
+    fn add(self, other: TimeSpec) -> TimeSpec {
+        TimeSpec {
+            seconds: self.seconds + other.seconds,
+        }
     }
 }
 
@@ -662,6 +696,73 @@ impl OutputReport {
         }
     }
 }
+
+/// Request for media file inspection
+#[derive(Debug, Clone)]
+pub struct InspectRequest {
+    pub input_file: String,
+    pub include_streams: bool,
+    pub include_metadata: bool,
+}
+
+impl InspectRequest {
+    /// Create new inspect request
+    pub fn new(input_file: String) -> Self {
+        Self {
+            input_file,
+            include_streams: true,
+            include_metadata: true,
+        }
+    }
+    
+    /// Create new inspect request with specific options
+    pub fn with_options(
+        input_file: String,
+        include_streams: bool,
+        include_metadata: bool,
+    ) -> Self {
+        Self {
+            input_file,
+            include_streams,
+            include_metadata,
+        }
+    }
+}
+
+/// Response from media file inspection
+#[derive(Debug, Clone)]
+pub struct InspectResponse {
+    pub success: bool,
+    pub media_info: MediaInfo,
+    pub error_message: Option<String>,
+}
+
+impl InspectResponse {
+    /// Create successful inspect response
+    pub fn success(media_info: MediaInfo) -> Self {
+        Self {
+            success: true,
+            media_info,
+            error_message: None,
+        }
+    }
+    
+    /// Create failed inspect response
+    pub fn failure(error_message: String) -> Self {
+        Self {
+            success: false,
+            media_info: MediaInfo::new(
+                "unknown".to_string(),
+                0,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ).unwrap_or_else(|_| panic!("Failed to create default MediaInfo")),
+            error_message: Some(error_message),
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests;

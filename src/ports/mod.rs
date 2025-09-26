@@ -77,9 +77,19 @@ pub trait ExecutePort: Send + Sync {
     async fn get_execution_progress(&self) -> Result<ExecutionProgress, DomainError>;
 }
 
+/// Execution phase for progress tracking
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecutionPhase {
+    Initializing,
+    Processing,
+    Finalizing,
+    Complete,
+}
+
 /// Hardware acceleration type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HardwareAccelerationType {
+    None,  // No hardware acceleration
     Nvenc, // NVIDIA
     Qsv,   // Intel Quick Sync
     Amf,   // AMD

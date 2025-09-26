@@ -31,6 +31,8 @@ pub enum DomainError {
     OutOfRange(String),
     /// File system error
     FsFail(String),
+    /// Feature not implemented yet
+    NotImplemented,
 }
 
 impl fmt::Display for DomainError {
@@ -49,6 +51,7 @@ impl fmt::Display for DomainError {
             DomainError::ProbeFail(msg) => write!(f, "Probe failure: {}", msg),
             DomainError::OutOfRange(msg) => write!(f, "Out of range: {}", msg),
             DomainError::FsFail(msg) => write!(f, "File system error: {}", msg),
+            DomainError::NotImplemented => write!(f, "Feature not implemented yet"),
         }
     }
 }

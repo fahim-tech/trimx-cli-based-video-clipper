@@ -3,7 +3,7 @@
 use tracing::{info, warn};
 
 use crate::output::{VerificationResult, OutputConfig};
-use crate::probe::{MediaInfo, VideoInspector};
+use crate::probe::{MediaInfo, inspector::VideoInspector};
 use crate::error::{TrimXError, TrimXResult};
 
 /// Output file verifier

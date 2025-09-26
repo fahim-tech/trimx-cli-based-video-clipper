@@ -83,17 +83,24 @@ impl LogPort for TracingLogAdapter {
         
         let tracing_level = Self::to_tracing_level(&event.level);
         
-        // Create structured log entry
-        let span = tracing::span!(tracing_level, "structured_event");
-        let _enter = span.enter();
-        
-        // Add context fields
-        for (key, value) in &event.context {
-            tracing::event!(tracing_level, key = %key, value = %value);
+        // Log structured event based on level
+        match event.level {
+            LogLevel::Error => {
+                tracing::error!(message = %event.message, ?event.context);
+            }
+            LogLevel::Warn => {
+                tracing::warn!(message = %event.message, ?event.context);
+            }
+            LogLevel::Info => {
+                tracing::info!(message = %event.message, ?event.context);
+            }
+            LogLevel::Debug => {
+                tracing::debug!(message = %event.message, ?event.context);
+            }
+            LogLevel::Trace => {
+                tracing::trace!(message = %event.message, ?event.context);
+            }
         }
-        
-        // Log the main message
-        tracing::event!(tracing_level, message = %event.message);
     }
     
     async fn set_log_level(&self, level: LogLevel) {

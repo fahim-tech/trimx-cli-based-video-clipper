@@ -21,7 +21,7 @@
 
 use anyhow::Result;
 use clap::Parser;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 mod cli;
 mod domain;
@@ -34,6 +34,10 @@ use domain::model::*;
 use domain::errors::*;
 use app::*;
 use adapters::*;
+use ports::*;
+use crate::app::clip_interactor::{ClipRequest, ClipInteractor};
+use crate::app::inspect_interactor::InspectInteractor;
+use crate::app::verify_interactor::{VerifyRequest, VerifyInteractor};
 
 /// Main entry point for the TrimX CLI application
 fn main() -> Result<()> {
@@ -47,24 +51,64 @@ fn main() -> Result<()> {
     // Parse command line arguments
     let cli = Cli::parse();
 
-    // Execute the requested command
-    match cli.command {
+    // Execute the requested command with comprehensive error handling
+    let result = match cli.command {
         Commands::Clip(args) => {
             info!("Executing clip command");
-            execute_clip_command(args)?;
+            execute_clip_command(args)
         }
         Commands::Inspect(args) => {
             info!("Executing inspect command");
-            execute_inspect_command(args)?;
+            execute_inspect_command(args)
         }
         Commands::Verify(args) => {
             info!("Executing verify command");
-            execute_verify_command(args)?;
+            execute_verify_command(args)
+        }
+    };
+
+    match result {
+        Ok(()) => {
+            info!("TrimX CLI completed successfully");
+            Ok(())
+        }
+        Err(e) => {
+            error!("TrimX CLI failed: {}", e);
+            
+            // Provide helpful error messages based on error type
+            if let Some(domain_error) = e.downcast_ref::<DomainError>() {
+                match domain_error {
+                    DomainError::BadArgs(msg) => {
+                        error!("Invalid arguments: {}", msg);
+                        error!("Use --help for usage information");
+                        std::process::exit(2);
+                    }
+                    DomainError::FileNotFound(msg) => {
+                        error!("File not found: {}", msg);
+                        error!("Please check the file path and try again");
+                        std::process::exit(3);
+                    }
+                    DomainError::ProbeFail(msg) => {
+                        error!("Failed to analyze media file: {}", msg);
+                        error!("The file may be corrupted or in an unsupported format");
+                        std::process::exit(4);
+                    }
+                    DomainError::ProcessingError(msg) => {
+                        error!("Video processing failed: {}", msg);
+                        error!("Please check the input file and try again");
+                        std::process::exit(5);
+                    }
+                    _ => {
+                        error!("Operation failed: {}", domain_error);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                error!("Unexpected error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
-
-    info!("TrimX CLI completed successfully");
-    Ok(())
 }
 
 /// Execute clip command using hexagonal architecture
@@ -91,8 +135,45 @@ fn execute_clip_command(args: ClipArgs) -> Result<()> {
         mode,
     ).map_err(|e| anyhow::anyhow!("Invalid clip request: {}", e))?;
     
-    // TODO: Initialize adapters and execute through interactor
-    info!("Clip command would be executed with request: {:?}", request);
+    // Initialize adapters and execute through interactor
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let probe_adapter = Box::new(LibavProbeAdapter::new()?);
+        let exec_adapter = Box::new(LibavExecutionAdapter::new()?);
+        let fs_adapter = Box::new(FsWindowsAdapter::new()?);
+        let config_adapter = Box::new(TomlConfigAdapter::new()?);
+        let log_adapter = Box::new(TracingLogAdapter::new()?);
+        
+        let interactor = ClipInteractor::new(
+            probe_adapter,
+            exec_adapter,
+            fs_adapter,
+            config_adapter,
+            log_adapter,
+        );
+        
+        let result = interactor.execute(request).await?;
+        
+        if result.success {
+            info!("Clip operation completed successfully");
+            info!("Output file: {}", result.output_file);
+            info!("Duration: {}", result.duration);
+            info!("Mode used: {:?}", result.mode_used);
+            
+            // Show any warnings
+            for warning in &result.warnings {
+                warn!("Warning: {}", warning);
+            }
+        } else {
+            error!("Clip operation failed");
+            for warning in &result.warnings {
+                error!("Error: {}", warning);
+            }
+            return Err(anyhow::anyhow!("Clip operation failed"));
+        }
+        
+        Ok(())
+    })?;
     
     Ok(())
 }
@@ -106,8 +187,46 @@ fn execute_inspect_command(args: InspectArgs) -> Result<()> {
         args.metadata,
     );
     
-    // TODO: Initialize adapters and execute through interactor
-    info!("Inspect command would be executed with request: {:?}", request);
+    // Initialize adapters and execute through interactor
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let probe_adapter = Box::new(LibavProbeAdapter::new()?);
+        let fs_adapter = Box::new(FsWindowsAdapter::new()?);
+        let log_adapter = Box::new(TracingLogAdapter::new()?);
+        
+        let interactor = InspectInteractor::new(
+            probe_adapter,
+            fs_adapter,
+            log_adapter,
+        );
+        
+        let result = interactor.execute(request).await?;
+        
+        if result.success {
+            info!("Inspect operation completed successfully");
+            info!("Format: {}", result.media_info.format);
+            info!("Duration: {}", result.media_info.duration);
+            info!("File size: {} bytes", result.media_info.file_size);
+            info!("Streams: {} total", result.media_info.total_streams());
+            
+            for (i, video_stream) in result.media_info.video_streams.iter().enumerate() {
+                info!("Video stream {}: {}x{} @ {:.2} fps", 
+                    i, video_stream.width, video_stream.height, video_stream.frame_rate);
+            }
+            
+            for (i, audio_stream) in result.media_info.audio_streams.iter().enumerate() {
+                info!("Audio stream {}: {} Hz, {} channels", 
+                    i, audio_stream.sample_rate, audio_stream.channels);
+            }
+        } else {
+            error!("Inspect operation failed");
+            if let Some(error_msg) = &result.error_message {
+                error!("Error: {}", error_msg);
+            }
+        }
+        
+        Ok::<(), DomainError>(())
+    })?;
     
     Ok(())
 }
@@ -136,8 +255,42 @@ fn execute_verify_command(args: VerifyArgs) -> Result<()> {
         args.tolerance,
     );
     
-    // TODO: Initialize adapters and execute through interactor
-    info!("Verify command would be executed with request: {:?}", request);
+    // Initialize adapters and execute through interactor
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let probe_adapter = Box::new(LibavProbeAdapter::new()?);
+        let fs_adapter = Box::new(FsWindowsAdapter::new()?);
+        let log_adapter = Box::new(TracingLogAdapter::new()?);
+        
+        let interactor = VerifyInteractor::new(
+            probe_adapter,
+            fs_adapter,
+            log_adapter,
+        );
+        
+        let result = interactor.execute(request).await?;
+        
+        if result.verification_result.success {
+            info!("Verify operation completed successfully");
+            info!("Overall score: {:.1}%", result.verification_result.overall_score);
+            
+            for check in &result.verification_result.checks {
+                let status = if check.success { "✓" } else { "✗" };
+                info!("{} {}: {}", status, check.check_type, check.details);
+            }
+        } else {
+            error!("Verify operation failed");
+            error!("Error: {}", result.verification_result.error_message);
+            
+            for check in &result.verification_result.checks {
+                if !check.success {
+                    error!("Failed check: {} - {}", check.check_type, check.error_message);
+                }
+            }
+        }
+        
+        Ok::<(), DomainError>(())
+    })?;
     
     Ok(())
 }

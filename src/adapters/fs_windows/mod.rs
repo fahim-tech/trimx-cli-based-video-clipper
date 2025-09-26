@@ -146,14 +146,52 @@ impl FsPort for FsWindowsAdapter {
     async fn validate_path(&self, file_path: &str) -> Result<bool, DomainError> {
         let path = Path::new(file_path);
         
-        // Check for path traversal attacks
-        if path.to_string_lossy().contains("..") {
+        // Check for empty or too long paths
+        if file_path.is_empty() || file_path.len() > 32767 {
             return Ok(false);
         }
         
-        // Check for invalid characters
-        let invalid_chars = ['<', '>', ':', '"', '|', '?', '*'];
-        if path.to_string_lossy().chars().any(|c| invalid_chars.contains(&c)) {
+        // Check for path traversal attacks
+        if file_path.contains("..") || file_path.contains("./") || file_path.contains(".\\") {
+            return Ok(false);
+        }
+        
+        // Check for invalid characters on Windows
+        let invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\0'];
+        if file_path.chars().any(|c| invalid_chars.contains(&c)) {
+            return Ok(false);
+        }
+        
+        // Check for reserved names
+        let reserved_names = [
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        ];
+        
+        if let Some(filename) = path.file_name() {
+            if let Some(filename_str) = filename.to_str() {
+                let filename_upper = filename_str.to_uppercase();
+                if reserved_names.contains(&filename_upper.as_str()) {
+                    return Ok(false);
+                }
+                
+                // Check for reserved names with extensions
+                if filename_upper.starts_with("CON.") || filename_upper.starts_with("PRN.") ||
+                   filename_upper.starts_with("AUX.") || filename_upper.starts_with("NUL.") {
+                    return Ok(false);
+                }
+            }
+        }
+        
+        // Check for trailing dots or spaces (Windows doesn't allow these)
+        if file_path.ends_with('.') || file_path.ends_with(' ') {
+            return Ok(false);
+        }
+        
+        // Check for paths that are too deep
+        let depth = file_path.matches(std::path::MAIN_SEPARATOR).count();
+        if depth > 32 {
             return Ok(false);
         }
         

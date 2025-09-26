@@ -113,11 +113,12 @@ impl VerifyInteractor {
             error_message = format_check.error_message;
         }
         
+        let overall_score = self.calculate_overall_score(&checks);
         Ok(VerificationResult {
             success,
             error_message,
             checks,
-            overall_score: self.calculate_overall_score(&checks),
+            overall_score,
         })
     }
     

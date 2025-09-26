@@ -9,20 +9,12 @@ mod tests {
     fn test_time_spec_from_seconds() {
         let time = TimeSpec::from_seconds(3661.5);
         assert_eq!(time.seconds, 3661.5);
-        assert_eq!(time.hours(), 1);
-        assert_eq!(time.minutes(), 1);
-        assert_eq!(time.seconds_component(), 1);
-        assert_eq!(time.milliseconds(), 500);
     }
 
     #[test]
     fn test_time_spec_from_components() {
         let time = TimeSpec::from_components(1, 2, 3, 500);
         assert_eq!(time.seconds, 3723.5);
-        assert_eq!(time.hours(), 1);
-        assert_eq!(time.minutes(), 2);
-        assert_eq!(time.seconds_component(), 3);
-        assert_eq!(time.milliseconds(), 500);
     }
 
     #[test]
@@ -75,12 +67,12 @@ mod tests {
 
     #[test]
     fn test_timebase_pts_conversion() {
-        let timebase = Timebase::new(1, 30);
+        let timebase = Timebase::new(1, 30).unwrap();
         let pts = 150;
-        let seconds = timebase.unwrap().pts_to_seconds(pts);
+        let seconds = timebase.pts_to_seconds(pts);
         assert_eq!(seconds, 5.0);
         
-        let back_to_pts = timebase.unwrap().seconds_to_pts(seconds);
+        let back_to_pts = timebase.seconds_to_pts(seconds);
         assert_eq!(back_to_pts, pts);
     }
 

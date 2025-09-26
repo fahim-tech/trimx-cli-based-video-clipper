@@ -51,7 +51,8 @@ impl ClipInteractor {
         self.validate_cut_range(&request.cut_range, &media_info)?;
         
         // Select optimal clipping mode
-        let selected_mode = ClippingModeSelector::select_mode(&media_info, &request.cut_range, request.mode)?;
+        let mode = request.mode.clone();
+        let selected_mode = ClippingModeSelector::select_mode(&media_info, &request.cut_range, mode)?;
         self.log_port.info(&format!("Selected clipping mode: {:?}", selected_mode));
         
         // Create execution plan
