@@ -1,22 +1,24 @@
 // Verify interactor - Orchestrates output verification use case
 
+use std::sync::Arc;
+
 use crate::domain::model::*;
 use crate::domain::errors::*;
 use crate::ports::*;
 
 /// Interactor for output verification use case
 pub struct VerifyInteractor {
-    probe_port: Box<dyn ProbePort>,
-    fs_port: Box<dyn FsPort>,
-    log_port: Box<dyn LogPort>,
+    probe_port: Arc<dyn ProbePort>,
+    fs_port: Arc<dyn FsPort>,
+    log_port: Arc<dyn LogPort>,
 }
 
 impl VerifyInteractor {
     /// Create new verify interactor with injected ports
     pub fn new(
-        probe_port: Box<dyn ProbePort>,
-        fs_port: Box<dyn FsPort>,
-        log_port: Box<dyn LogPort>,
+        probe_port: Arc<dyn ProbePort>,
+        fs_port: Arc<dyn FsPort>,
+        log_port: Arc<dyn LogPort>,
     ) -> Self {
         Self {
             probe_port,
@@ -27,41 +29,84 @@ impl VerifyInteractor {
     
     /// Execute output verification
     pub async fn execute(&self, request: VerifyRequest) -> Result<VerifyResponse, DomainError> {
+        self.verify_output(request).await
+    }
+    
+    /// Execute output verification (alias for compatibility)
+    pub async fn verify_output(&self, request: VerifyRequest) -> Result<VerifyResponse, DomainError> {
+        // Parse time strings if expected_range is not properly set
+        let expected_range = if !request.expected_start.is_empty() && !request.expected_end.is_empty() {
+            let start = TimeSpec::parse(&request.expected_start)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid start time: {}", e)))?;
+            let end = TimeSpec::parse(&request.expected_end)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid end time: {}", e)))?;
+            CutRange::new(start, end)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid cut range: {}", e)))?
+        } else {
+            request.expected_range.clone()
+        };
+
+        // Use output_path as primary, fall back to output_file for compatibility
+        let output_file = if !request.output_path.is_empty() {
+            request.output_path.clone()
+        } else {
+            request.output_file.clone()
+        };
+        
+        // Create a processed request for the existing logic
+        let processed_request = VerifyRequest {
+            output_file: output_file.clone(),
+            output_path: output_file.clone(),
+            expected_range,
+            expected_mode: request.mode.clone(),
+            mode: request.mode.clone(),
+            tolerance_ms: request.tolerance,
+            tolerance: request.tolerance,
+            expected_start: request.expected_start,
+            expected_end: request.expected_end,
+        };
+        
         // Log start of operation
-        let _ = self.log_port.info(&format!("Starting output verification for: {}", request.output_file));
+        self.log_port.info(&format!("Starting output verification for: {}", processed_request.output_file)).await;
         
         // Validate output file exists
-        if !self.fs_port.file_exists(&request.output_file).await? {
-            return Err(DomainError::FsFail(format!("Output file does not exist: {}", request.output_file)));
+        if !self.fs_port.file_exists(&processed_request.output_file).await? {
+            return Err(DomainError::FsFail(format!("Output file does not exist: {}", processed_request.output_file)));
         }
         
         // Probe output file
-        let output_media_info = self.probe_port.probe_media(&request.output_file).await?;
-        let _ = self.log_port.info(&format!("Output file probed: duration {}, {} streams", 
-            output_media_info.duration, output_media_info.total_streams()));
-        
-        // Get file metadata
-        let file_metadata = self.fs_port.get_file_metadata(&request.output_file).await?;
+        let output_media_info = self.probe_port.probe_media(&processed_request.output_file).await?;
+        self.log_port
+            .info(&format!(
+                "Output file probed: duration {}, {} streams",
+                output_media_info.duration,
+                output_media_info.total_streams()
+            ))
+            .await;
         
         // Perform verification checks
-        let verification_result = self.perform_verification_checks(
-            &request,
-            &output_media_info,
-            &file_metadata,
-        ).await?;
+        let file_metadata = self.fs_port.get_file_metadata(&processed_request.output_file).await?;
+
+        let verification_result = self
+            .perform_verification_checks(&processed_request, &output_media_info, &file_metadata)
+            .await?;
         
         // Log completion
         if verification_result.success {
-            let _ = self.log_port.info("Output verification completed successfully");
+            self.log_port.info("Output verification completed successfully").await;
         } else {
-            let _ = self.log_port.warn(&format!("Output verification failed: {}", verification_result.error_message));
+            self.log_port
+                .warn(&format!("Output verification failed: {}", verification_result.error_message))
+                .await;
         }
         
         Ok(VerifyResponse {
-            output_file: request.output_file,
+            output_file: processed_request.output_file,
             verification_result,
             output_media_info,
             file_metadata,
+            is_valid: verification_result.success,
+            message: if verification_result.success { None } else { Some(verification_result.error_message) },
         })
     }
     
@@ -170,7 +215,7 @@ impl VerifyInteractor {
     }
     
     /// Verify streams are present and valid
-    fn verify_streams(&self, media_info: &MediaInfo, expected_mode: &ClippingMode) -> VerificationCheck {
+    fn verify_streams(&self, media_info: &MediaInfo, _expected_mode: &ClippingMode) -> VerificationCheck {
         if media_info.total_streams() == 0 {
             VerificationCheck {
                 check_type: "streams".to_string(),
@@ -227,10 +272,15 @@ impl VerifyInteractor {
 /// Request for output verification
 #[derive(Debug, Clone)]
 pub struct VerifyRequest {
-    pub output_file: String,
+    pub output_path: String,
+    pub output_file: String,  // For backward compatibility
+    pub expected_start: String,
+    pub expected_end: String,
     pub expected_range: CutRange,
-    pub expected_mode: ClippingMode,
-    pub tolerance_ms: u32,
+    pub mode: ClippingMode,
+    pub expected_mode: ClippingMode,  // For backward compatibility
+    pub tolerance: u32,
+    pub tolerance_ms: u32,  // For backward compatibility
 }
 
 impl VerifyRequest {
@@ -271,6 +321,8 @@ pub struct VerifyResponse {
     pub verification_result: VerificationResult,
     pub output_media_info: MediaInfo,
     pub file_metadata: crate::ports::FileMetadata,
+    pub is_valid: bool,
+    pub message: Option<String>,
 }
 
 /// Verification result with detailed checks

@@ -288,7 +288,6 @@ impl HybridClipper {
         };
         
         self.reencode_engine.clip(trailing_config)?;
-        let _ = total_progress += 25.0;
 
         // Step 4: Concatenate segments
         info!("Step 4/4: Concatenating segments");

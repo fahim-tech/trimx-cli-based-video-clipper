@@ -2,6 +2,8 @@
 //!
 //! This module handles command-line argument parsing and command execution.
 
+pub mod commands;
+
 use clap::{Parser, Subcommand, Args};
 
 /// TrimX CLI Video Clipper

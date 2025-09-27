@@ -4,21 +4,19 @@
 //! lossless stream-copy and fallback re-encoding capabilities.
 
 pub mod cli;
-pub mod error;
-pub mod probe;
-pub mod planner;
+pub mod domain;
 pub mod engine;
+pub mod planner;
+pub mod probe;
 pub mod streams;
 pub mod output;
 pub mod utils;
+pub mod error;
 
 // Re-export commonly used types
 pub use error::{TrimXError, TrimXResult};
-pub use probe::{MediaInfo, VideoStreamInfo, AudioStreamInfo, SubtitleStreamInfo};
-pub use planner::{CutPlan, ClippingStrategy, KeyframeInfo, StreamMapping};
-pub use engine::{EngineConfig, ClippingProgress, ClippingPhase};
-pub use output::{OutputConfig, OverwritePolicy, VerificationResult};
-pub use utils::{Utils, time::TimeParser, path::PathUtils};
+pub use domain::errors::DomainError;
+pub use domain::model::{MediaInfo, VideoStreamInfo, AudioStreamInfo, SubtitleStreamInfo};
 
 /// Initialize TrimX library
 pub fn init() -> TrimXResult<()> {

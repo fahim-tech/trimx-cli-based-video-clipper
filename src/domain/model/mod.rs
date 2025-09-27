@@ -462,6 +462,22 @@ impl MediaInfo {
     }
 }
 
+impl Default for MediaInfo {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            duration: TimeSpec::from_seconds(0.0),
+            video_streams: Vec::new(),
+            audio_streams: Vec::new(),
+            subtitle_streams: Vec::new(),
+            container: String::new(),
+            file_size: 0,
+            bit_rate: None,
+            metadata: std::collections::HashMap::new(),
+        }
+    }
+}
+
 /// Cut range specification
 #[derive(Debug, Clone, PartialEq)]
 pub struct CutRange {

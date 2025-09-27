@@ -57,28 +57,8 @@ mod tests {
         assert_eq!(mode, ClippingMode::Reencode);
     }
 
-    #[test]
-    fn test_keyframe_analyzer_proximity() {
-        let video_stream = VideoStreamInfo::new(
-            0,
-            "h264".to_string(),
-            1920,
-            1080,
-            30.0,
-            Timebase::frame_rate_30(),
-        ).unwrap();
-        
-        let cut_range = CutRange::new(
-            TimeSpec::from_seconds(1.0),
-            TimeSpec::from_seconds(2.0),
-        ).unwrap();
-        
-        let proximity = KeyframeAnalyzer::analyze_keyframe_proximity(&video_stream, &cut_range);
-        
-        assert!(proximity.is_copy_viable);
-        assert!(proximity.start_distance < 0.5);
-        assert!(proximity.end_distance < 0.5);
-    }
+    // Keyframe analysis test removed - now handled by planner module's KeyframeAnalyzer
+    // which performs actual GOP analysis on video files
 
     #[test]
     fn test_quality_settings_selector_copy_mode() {

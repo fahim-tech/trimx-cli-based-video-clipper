@@ -136,7 +136,7 @@ impl FsPort for FsWindowsAdapter {
         Ok(())
     }
     
-    async fn get_available_space(&self, dir_path: &str) -> Result<u64, DomainError> {
+    async fn get_available_space(&self, _dir_path: &str) -> Result<u64, DomainError> {
         // For now, return a large number - in real implementation, this would use Windows API
         Ok(1024 * 1024 * 1024) // 1 GB
     }

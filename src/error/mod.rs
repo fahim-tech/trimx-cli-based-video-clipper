@@ -51,4 +51,4 @@ pub enum TrimXError {
 }
 
 /// Result type alias for TrimX operations
-pub type TrimXResult<T> = Result<T, TrimXError>;
+pub type TrimXResult<T> = std::result::Result<T, TrimXError>;

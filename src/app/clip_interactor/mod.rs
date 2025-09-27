@@ -1,5 +1,7 @@
 // Clip interactor - Orchestrates video clipping use case
 
+use std::sync::Arc;
+
 use crate::domain::model::*;
 use crate::domain::errors::*;
 use crate::domain::rules::*;
@@ -7,21 +9,21 @@ use crate::ports::*;
 
 /// Interactor for video clipping use case
 pub struct ClipInteractor {
-    probe_port: Box<dyn ProbePort>,
-    execute_port: Box<dyn ExecutePort>,
-    fs_port: Box<dyn FsPort>,
-    config_port: Box<dyn ConfigPort>,
-    log_port: Box<dyn LogPort>,
+    probe_port: Arc<dyn ProbePort>,
+    execute_port: Arc<dyn ExecutePort>,
+    fs_port: Arc<dyn FsPort>,
+    config_port: Arc<dyn ConfigPort>,
+    log_port: Arc<dyn LogPort>,
 }
 
 impl ClipInteractor {
     /// Create new clip interactor with injected ports
     pub fn new(
-        probe_port: Box<dyn ProbePort>,
-        execute_port: Box<dyn ExecutePort>,
-        fs_port: Box<dyn FsPort>,
-        config_port: Box<dyn ConfigPort>,
-        log_port: Box<dyn LogPort>,
+        probe_port: Arc<dyn ProbePort>,
+        execute_port: Arc<dyn ExecutePort>,
+        fs_port: Arc<dyn FsPort>,
+        config_port: Arc<dyn ConfigPort>,
+        log_port: Arc<dyn LogPort>,
     ) -> Self {
         Self {
             probe_port,
@@ -34,38 +36,80 @@ impl ClipInteractor {
     
     /// Execute video clipping
     pub async fn execute(&self, request: ClipRequest) -> Result<ClipResponse, DomainError> {
+        self.clip_video(request).await
+    }
+    
+    /// Execute video clipping (alias for compatibility)
+    pub async fn clip_video(&self, request: ClipRequest) -> Result<ClipResponse, DomainError> {
+        // Parse time strings if cut_range is not properly set
+        let cut_range = if !request.start_time.is_empty() && !request.end_time.is_empty() {
+            let start = TimeSpec::parse(&request.start_time)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid start time: {}", e)))?;
+            let end = TimeSpec::parse(&request.end_time)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid end time: {}", e)))?;
+            CutRange::new(start, end)
+                .map_err(|e| DomainError::BadArgs(format!("Invalid cut range: {}", e)))?
+        } else {
+            request.cut_range.clone()
+        };
+
+        // Use input_path as primary, fall back to input_file for compatibility
+        let input_file = if !request.input_path.is_empty() {
+            request.input_path.clone()
+        } else {
+            request.input_file.clone()
+        };
+        
+        // Create a properly structured request for the existing logic
+        let processed_request = ClipRequest {
+            input_file: input_file.clone(),
+            input_path: input_file.clone(),
+            output_file: request.output_path.clone().or(request.output_file.clone()),
+            output_path: request.output_path.clone().or(request.output_file.clone()),
+            cut_range,
+            mode: request.mode,
+            quality_settings: request.quality_settings,
+            start_time: request.start_time,
+            end_time: request.end_time,
+            quality: request.quality,
+            overwrite: request.overwrite,
+            threads: request.threads,
+        };
+        
         // Log start of operation
-        let _ = self.log_port.info(&format!("Starting video clipping operation for file: {}", request.input_file));
+        self.log_port.info(&format!("Starting video clipping operation for file: {}", processed_request.input_file)).await;
         
         // Validate input file
-        if !self.fs_port.file_exists(&request.input_file).await? {
-            return Err(DomainError::FsFail(format!("Input file does not exist: {}", request.input_file)));
+        if !self.fs_port.file_exists(&processed_request.input_file).await? {
+            return Err(DomainError::FsFail(format!("Input file does not exist: {}", processed_request.input_file)));
         }
         
         // Probe media file
-        let media_info = self.probe_port.probe_media(&request.input_file).await?;
-        let _ = self.log_port.info(&format!("Media file probed: {} streams, duration: {}", 
-            media_info.total_streams(), media_info.duration));
+        let media_info = self.probe_port.probe_media(&processed_request.input_file).await?;
+        self.log_port.info(&format!("Media file probed: {} streams, duration: {}",
+            media_info.total_streams(), media_info.duration)).await;
         
         // Validate cut range
-        self.validate_cut_range(&request.cut_range, &media_info)?;
+        self.validate_cut_range(&processed_request.cut_range, &media_info)?;
         
         // Select optimal clipping mode
-        let mode = request.mode.clone();
-        let selected_mode = ClippingModeSelector::select_mode(&media_info, &request.cut_range, mode)?;
-        let _ = self.log_port.info(&format!("Selected clipping mode: {:?}", selected_mode));
+        let mode = processed_request.mode.clone();
+        let selected_mode = ClippingModeSelector::select_mode(&media_info, &processed_request.cut_range, mode)?;
+        self.log_port.info(&format!("Selected clipping mode: {:?}", selected_mode)).await;
         
         // Create execution plan
-        let plan = self.create_execution_plan(request, &media_info, selected_mode).await?;
+        let plan = self.create_execution_plan(processed_request, &media_info, selected_mode).await?;
         
         // Execute clipping
         let result = self.execute_port.execute_plan(&plan).await?;
         
         // Log completion
         if result.success {
-            let _ = self.log_port.info(&format!("Video clipping completed successfully. Output: {}", plan.output_file));
+            self.log_port
+                .info(&format!("Video clipping completed successfully. Output: {}", plan.output_file))
+                .await;
         } else {
-            let _ = self.log_port.error("Video clipping failed");
+            self.log_port.error("Video clipping failed").await;
         }
         
         Ok(ClipResponse {
@@ -129,7 +173,7 @@ impl ClipInteractor {
         let quality_settings = if let Some(settings) = request.quality_settings {
             settings
         } else {
-            let hardware_acceleration = self.execute_port.is_hardware_acceleration_available().await?;
+            let _hardware_acceleration = self.execute_port.is_hardware_acceleration_available().await?;
             QualitySettings::default() // Simplified for now
         };
         
@@ -147,7 +191,7 @@ impl ClipInteractor {
             container_format,
         )?;
         
-        let _ = self.log_port.debug(&format!("Created execution plan: {:?}", plan));
+        self.log_port.debug(&format!("Created execution plan: {:?}", plan)).await;
         Ok(plan)
     }
     
@@ -192,11 +236,18 @@ impl ClipInteractor {
 /// Request for video clipping
 #[derive(Debug, Clone)]
 pub struct ClipRequest {
-    pub input_file: String,
-    pub output_file: Option<String>,
+    pub input_path: String,
+    pub input_file: String,  // Keep for backward compatibility
+    pub output_path: Option<String>,
+    pub output_file: Option<String>,  // Keep for backward compatibility
+    pub start_time: String,
+    pub end_time: String,
     pub cut_range: CutRange,
     pub mode: ClippingMode,
+    pub quality: Option<u8>,
     pub quality_settings: Option<QualitySettings>,
+    pub overwrite: bool,
+    pub threads: Option<usize>,
 }
 
 impl ClipRequest {
