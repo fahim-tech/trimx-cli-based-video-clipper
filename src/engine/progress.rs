@@ -535,9 +535,15 @@ mod tests {
         let callback = TestCallback::new();
         tracker.add_callback(callback.clone());
 
+        // Set a very short update interval to avoid throttling
+        tracker.set_update_interval(Duration::from_millis(1));
+
         // Start operation
         tracker.start("test operation", Some(100));
         assert!(callback.started.load(Ordering::Relaxed));
+
+        // Small delay to ensure throttling doesn't interfere
+        std::thread::sleep(Duration::from_millis(2));
 
         // Update progress
         tracker.update(50, Some("halfway done".to_string()));

@@ -24,7 +24,7 @@ impl ClippingModeSelector {
         media_info: &MediaInfo,
         cut_range: &CutRange,
     ) -> Result<ClippingMode, DomainError> {
-        // Check if copy mode is viable
+        // Check if copy mode is viable first (most efficient)
         if Self::is_copy_mode_viable(media_info, cut_range) {
             return Ok(ClippingMode::Copy);
         }

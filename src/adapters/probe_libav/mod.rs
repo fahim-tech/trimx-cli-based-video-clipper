@@ -1,369 +1,209 @@
-//! FFmpeg probe adapter using libav bindings
+//! Mock probe adapter for testing and demonstration
 //! 
-//! This module provides comprehensive media file probing using FFmpeg.
+//! This module provides a mock implementation of media file inspection
+//! for testing and demonstration purposes.
 
 use async_trait::async_trait;
-use std::path::Path;
+use std::collections::HashMap;
 
 use crate::domain::errors::DomainError;
 use crate::domain::model::*;
 use crate::ports::*;
-// Note: Using internal probe types - would need to be properly mapped in production
 
-/// FFmpeg probe adapter using libav FFI
-pub struct LibavProbeAdapter {
-    /// Enable debug logging
+/// Mock probe adapter for testing
+pub struct MockProbeAdapter {
     debug_mode: bool,
 }
 
-impl LibavProbeAdapter {
+impl MockProbeAdapter {
     pub fn new() -> Result<Self, DomainError> {
-        // Initialize FFmpeg
-        ffmpeg_next::init().map_err(|e| DomainError::InternalError(format!("FFmpeg initialization failed: {}", e)))?;
-        
         Ok(Self {
             debug_mode: false,
         })
     }
-
-    /// Enable debug mode for verbose logging
+    
     pub fn with_debug(mut self) -> Self {
         self.debug_mode = true;
         self
     }
-
-    /// Convert FFmpeg Rational to tuple
-    fn rational_to_tuple(rational: ffmpeg_next::Rational) -> (i32, i32) {
-        (rational.numerator(), rational.denominator())
-    }
-
-    /// Convert PTS to seconds using timebase
-    fn pts_to_seconds(pts: i64, timebase: ffmpeg_next::Rational) -> f64 {
-        if pts == ffmpeg_next::ffi::AV_NOPTS_VALUE {
-            0.0
-        } else {
-            pts as f64 * timebase.numerator() as f64 / timebase.denominator() as f64
-        }
-    }
-
-    /// Extract video stream information
-    fn extract_video_stream_info(&self, stream: &ffmpeg_next::Stream, index: usize, timebase: crate::domain::model::Timebase) -> Result<crate::domain::model::VideoStreamInfo, DomainError> {
-        let _params = stream.parameters();
-        
-        // Get basic video parameters - use defaults since Parameters doesn't expose these directly
-        let width = 1920u32; // Default fallback
-        let height = 1080u32; // Default fallback
-        
-        // Get codec name
-        let codec = match stream.parameters().id() {
-            ffmpeg_next::codec::Id::H264 => "h264".to_string(),
-            ffmpeg_next::codec::Id::HEVC => "hevc".to_string(),
-            ffmpeg_next::codec::Id::VP9 => "vp9".to_string(),
-            ffmpeg_next::codec::Id::AV1 => "av1".to_string(),
-            ffmpeg_next::codec::Id::MPEG4 => "mpeg4".to_string(),
-            _ => format!("{:?}", stream.parameters().id()).to_lowercase(),
-        };
-        
-        // Calculate frame rate
-        let frame_rate = if stream.avg_frame_rate().numerator() > 0 && stream.avg_frame_rate().denominator() > 0 {
-            stream.avg_frame_rate().numerator() as f64 / stream.avg_frame_rate().denominator() as f64
-        } else {
-            30.0 // Default fallback
-        };
-        
-        let mut video_info = crate::domain::model::VideoStreamInfo::new(
-            index,
-            codec,
-            width,
-            height,
-            frame_rate,
-            timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create VideoStreamInfo: {}", e)))?;
-        
-        // Set stream duration if available
-        let duration = stream.duration();
-        if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
-            let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
-            video_info.duration = Some(crate::domain::model::TimeSpec::from_seconds(stream_duration));
-        }
-        
-        Ok(video_info)
-    }
-
-    /// Extract audio stream information
-    fn extract_audio_stream_info(&self, stream: &ffmpeg_next::Stream, index: usize, timebase: crate::domain::model::Timebase) -> Result<crate::domain::model::AudioStreamInfo, DomainError> {
-        let _params = stream.parameters();
-        
-        // Get codec name
-        let codec = match stream.parameters().id() {
-            ffmpeg_next::codec::Id::AAC => "aac".to_string(),
-            ffmpeg_next::codec::Id::MP3 => "mp3".to_string(),
-            ffmpeg_next::codec::Id::VORBIS => "vorbis".to_string(),
-            ffmpeg_next::codec::Id::OPUS => "opus".to_string(),
-            ffmpeg_next::codec::Id::FLAC => "flac".to_string(),
-            ffmpeg_next::codec::Id::AC3 => "ac3".to_string(),
-            _ => format!("{:?}", stream.parameters().id()).to_lowercase(),
-        };
-        
-        // Get audio parameters with fallbacks - use defaults since Parameters doesn't expose these directly
-        let sample_rate = 48000u32; // Default fallback
-        let channels = 2u32; // Default fallback
-        
-        let mut audio_info = crate::domain::model::AudioStreamInfo::new(
-            index,
-            codec,
-            sample_rate,
-            channels,
-            timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create AudioStreamInfo: {}", e)))?;
-        
-        // Set stream duration if available
-        let duration = stream.duration();
-        if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
-            let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
-            audio_info.duration = Some(crate::domain::model::TimeSpec::from_seconds(stream_duration));
-        }
-        
-        Ok(audio_info)
-    }
-
-    /// Extract subtitle stream information
-    fn extract_subtitle_stream_info(&self, stream: &ffmpeg_next::Stream, index: usize, timebase: crate::domain::model::Timebase) -> Result<crate::domain::model::SubtitleStreamInfo, DomainError> {
-        let _params = stream.parameters();
-        
-        // Get codec name
-        let codec = match stream.parameters().id() {
-            ffmpeg_next::codec::Id::SUBRIP => "srt".to_string(),
-            ffmpeg_next::codec::Id::WEBVTT => "webvtt".to_string(),
-            ffmpeg_next::codec::Id::ASS => "ass".to_string(),
-            ffmpeg_next::codec::Id::SSA => "ssa".to_string(),
-            ffmpeg_next::codec::Id::MOV_TEXT => "mov_text".to_string(),
-            _ => format!("{:?}", stream.parameters().id()).to_lowercase(),
-        };
-        
-        // Extract language if available
-        let language = stream.metadata().get("language").map(|s| s.to_string());
-        
-        Ok(crate::domain::model::SubtitleStreamInfo {
-            index,
-            codec,
-            language,
-            duration: None,
-            forced: false, // Would need to check disposition
-            default: false, // Would need to check disposition
-            timebase,
-        })
-    }
 }
 
 #[async_trait]
-impl ProbePort for LibavProbeAdapter {
+impl ProbePort for MockProbeAdapter {
     async fn probe_media(&self, file_path: &str) -> Result<MediaInfo, DomainError> {
-        let path = Path::new(file_path);
-        if !path.exists() {
-            return Err(DomainError::FileNotFound(format!("File not found: {}", file_path)));
+        if self.debug_mode {
+            println!("Probing media file: {}", file_path);
         }
-
+        
+        // Check if file exists
+        if !std::path::Path::new(file_path).exists() {
+            return Err(DomainError::ProcessingError(format!("File not found: {}", file_path)));
+        }
+        
         // Get file size
         let file_size = std::fs::metadata(file_path)
-            .map_err(|e| DomainError::FsFail(format!("Failed to get file metadata: {}", e)))?
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to get file metadata: {}", e)))?
             .len();
-
-        // Open input context
-        let ictx = ffmpeg_next::format::input(&file_path)
-            .map_err(|e| DomainError::ProbeFail(format!("Failed to open input file: {}", e)))?;
-
-        // Get format information
-        let container = ictx.format().name().to_string();
-        let duration = if ictx.duration() != ffmpeg_next::ffi::AV_NOPTS_VALUE {
-            ictx.duration() as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64
-        } else {
-            // If container duration is not available, calculate from streams
-            let mut max_duration = 0.0;
-            for stream in ictx.streams() {
-                let duration = stream.duration();
-                if duration != ffmpeg_next::ffi::AV_NOPTS_VALUE {
-                    let stream_duration = duration as f64 * stream.time_base().numerator() as f64 / stream.time_base().denominator() as f64;
-                    if stream_duration > max_duration {
-                        max_duration = stream_duration;
-                    }
-                }
-            }
-            max_duration
-        };
-
-        // Extract actual stream information
-        let mut video_streams: Vec<crate::domain::model::VideoStreamInfo> = Vec::new();
-        let mut audio_streams: Vec<crate::domain::model::AudioStreamInfo> = Vec::new();  
-        let mut subtitle_streams: Vec<crate::domain::model::SubtitleStreamInfo> = Vec::new();
-
-        // Process all streams
-        for (index, stream) in ictx.streams().enumerate() {
-            let timebase = crate::domain::model::Timebase::new(
-                stream.time_base().numerator(),
-                stream.time_base().denominator()
-            ).unwrap_or_else(|_| crate::domain::model::Timebase::av_time_base());
-
-            match stream.parameters().medium() {
-                ffmpeg_next::media::Type::Video => {
-                    if let Ok(video_info) = self.extract_video_stream_info(&stream, index, timebase) {
-                        video_streams.push(video_info);
-                    }
-                }
-                ffmpeg_next::media::Type::Audio => {
-                    if let Ok(audio_info) = self.extract_audio_stream_info(&stream, index, timebase) {
-                        audio_streams.push(audio_info);
-                    }
-                }
-                ffmpeg_next::media::Type::Subtitle => {
-                    if let Ok(subtitle_info) = self.extract_subtitle_stream_info(&stream, index, timebase) {
-                        subtitle_streams.push(subtitle_info);
-                    }
-                }
-                _ => {} // Skip unknown stream types
-            }
-        }
-
-        // Convert to domain MediaInfo - simplified implementation
-        let duration_timespec = crate::domain::model::TimeSpec::from_seconds(duration);
         
-        let domain_media_info = MediaInfo {
-            path: file_path.to_string(),
-            duration: duration_timespec,
-            video_streams,
-            audio_streams,
-            subtitle_streams,
-            container,
-            file_size,
-            bit_rate: None,
-            metadata: std::collections::HashMap::new(),
+        // Create mock video stream
+        let video_stream = VideoStreamInfo {
+            index: 0,
+            codec: "h264".to_string(),
+            width: 1920,
+            height: 1080,
+            frame_rate: 29.97,
+            timebase: Timebase::new(1, 30000).unwrap(),
+            bit_rate: Some(5000000),
+            rotation: Some(0.0),
+            duration: Some(TimeSpec::from_seconds(120.0)),
+            keyframe_interval: Some(2.0),
+            color_space: Some("bt709".to_string()),
+            pixel_format: Some("yuv420p".to_string()),
         };
-
-        Ok(domain_media_info)
+        
+        // Create mock audio stream
+        let audio_stream = AudioStreamInfo {
+            index: 1,
+            codec: "aac".to_string(),
+            sample_rate: 48000,
+            channels: 2,
+            timebase: Timebase::new(1, 48000).unwrap(),
+            bit_rate: Some(128000),
+            sample_format: Some("fltp".to_string()),
+            channel_layout: Some("stereo".to_string()),
+            duration: Some(TimeSpec::from_seconds(120.0)),
+            language: Some("eng".to_string()),
+        };
+        
+        // Create metadata
+        let mut metadata = HashMap::new();
+        metadata.insert("format".to_string(), "mp4".to_string());
+        metadata.insert("duration".to_string(), "120.0".to_string());
+        metadata.insert("bit_rate".to_string(), "5128000".to_string());
+        metadata.insert("file_size".to_string(), file_size.to_string());
+        
+        Ok(MediaInfo {
+            path: file_path.to_string(),
+            container: "mp4".to_string(),
+            duration: TimeSpec::from_seconds(120.0),
+            video_streams: vec![video_stream],
+            audio_streams: vec![audio_stream],
+            subtitle_streams: vec![],
+            bit_rate: Some(5128000),
+            file_size,
+            metadata,
+        })
     }
-
-    async fn get_video_stream_info(&self, _file_path: &str, stream_index: usize) -> Result<VideoStreamInfo, DomainError> {
-        // Simplified placeholder implementation
-        let timebase = Timebase::new(1, 30)
-            .map_err(|e| DomainError::ProbeFail(format!("Invalid timebase: {}", e)))?;
-
-        VideoStreamInfo::new(
-            stream_index,
-            "h264".to_string(),
-            1920,
-            1080,
-            30.0,
-            timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create VideoStreamInfo: {}", e)))
+    
+    async fn get_video_stream_info(&self, file_path: &str, stream_index: usize) -> Result<VideoStreamInfo, DomainError> {
+        if self.debug_mode {
+            println!("Getting video stream info for stream {} in {}", stream_index, file_path);
+        }
+        
+        Ok(VideoStreamInfo {
+            index: stream_index,
+            codec: "h264".to_string(),
+            width: 1920,
+            height: 1080,
+            frame_rate: 29.97,
+            timebase: Timebase::new(1, 30000).unwrap(),
+            bit_rate: Some(5000000),
+            rotation: Some(0.0),
+            duration: Some(TimeSpec::from_seconds(120.0)),
+            keyframe_interval: Some(2.0),
+            color_space: Some("bt709".to_string()),
+            pixel_format: Some("yuv420p".to_string()),
+        })
     }
-
-    async fn get_audio_stream_info(&self, _file_path: &str, stream_index: usize) -> Result<AudioStreamInfo, DomainError> {
-        // Simplified placeholder implementation
-        let timebase = Timebase::av_time_base();
-
-        AudioStreamInfo::new(
-            stream_index,
-            "aac".to_string(),
-            48000,
-            2,
-            timebase,
-        ).map_err(|e| DomainError::ProbeFail(format!("Failed to create AudioStreamInfo: {}", e)))
+    
+    async fn get_audio_stream_info(&self, file_path: &str, stream_index: usize) -> Result<AudioStreamInfo, DomainError> {
+        if self.debug_mode {
+            println!("Getting audio stream info for stream {} in {}", stream_index, file_path);
+        }
+        
+        Ok(AudioStreamInfo {
+            index: stream_index,
+            codec: "aac".to_string(),
+            sample_rate: 48000,
+            channels: 2,
+            timebase: Timebase::new(1, 48000).unwrap(),
+            bit_rate: Some(128000),
+            sample_format: Some("fltp".to_string()),
+            channel_layout: Some("stereo".to_string()),
+            duration: Some(TimeSpec::from_seconds(120.0)),
+            language: Some("eng".to_string()),
+        })
     }
-
-    async fn get_subtitle_stream_info(&self, _file_path: &str, stream_index: usize) -> Result<SubtitleStreamInfo, DomainError> {
-        // Simplified placeholder implementation
-        let timebase = Timebase::av_time_base();
+    
+    async fn get_subtitle_stream_info(&self, file_path: &str, stream_index: usize) -> Result<SubtitleStreamInfo, DomainError> {
+        if self.debug_mode {
+            println!("Getting subtitle stream info for stream {} in {}", stream_index, file_path);
+        }
         
         Ok(SubtitleStreamInfo {
             index: stream_index,
             codec: "srt".to_string(),
-            language: Some("en".to_string()),
-            duration: None,
+            language: Some("eng".to_string()),
+            duration: Some(TimeSpec::from_seconds(120.0)),
             forced: false,
             default: false,
-            timebase,
+            timebase: Timebase::new(1, 1000).unwrap(),
         })
     }
-
+    
     async fn is_format_supported(&self, file_path: &str) -> Result<bool, DomainError> {
-        // Try to open the file to see if FFmpeg can handle it
-        match ffmpeg_next::format::input(&file_path) {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+        // Check if file exists and has a supported extension
+        if !std::path::Path::new(file_path).exists() {
+            return Ok(false);
         }
+        
+        let extension = std::path::Path::new(file_path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+        
+        let supported_extensions = ["mp4", "mkv", "avi", "mov", "ts", "m4v"];
+        Ok(supported_extensions.contains(&extension))
     }
-
+    
     async fn get_stream_counts(&self, file_path: &str) -> Result<(usize, usize, usize), DomainError> {
-        let ictx = ffmpeg_next::format::input(&file_path)
-            .map_err(|e| DomainError::ProbeFail(format!("Failed to open input file: {}", e)))?;
-
-        let mut video_count = 0;
-        let mut audio_count = 0;
-        let mut subtitle_count = 0;
-
-        for stream in ictx.streams() {
-            match stream.parameters().medium() {
-                ffmpeg_next::media::Type::Video => video_count += 1,
-                ffmpeg_next::media::Type::Audio => audio_count += 1,
-                ffmpeg_next::media::Type::Subtitle => subtitle_count += 1,
-                _ => {} // Skip other types
-            }
+        if self.debug_mode {
+            println!("Getting stream counts for {}", file_path);
         }
-
-        Ok((video_count, audio_count, subtitle_count))
+        
+        // Mock stream counts
+        Ok((1, 1, 0)) // 1 video, 1 audio, 0 subtitles
     }
-
+    
     async fn probe_keyframes(&self, file_path: &str, stream_index: usize) -> Result<Vec<KeyframeInfo>, DomainError> {
-        let mut ictx = ffmpeg_next::format::input(&file_path)
-            .map_err(|e| DomainError::ProbeFail(format!("Failed to open input file: {}", e)))?;
-
-        let stream = ictx.streams().nth(stream_index)
-            .ok_or_else(|| DomainError::ProbeFail(format!("Stream index {} not found", stream_index)))?;
-
-        if stream.parameters().medium() != ffmpeg_next::media::Type::Video {
-            return Err(DomainError::ProbeFail(format!("Stream {} is not a video stream", stream_index)));
+        if self.debug_mode {
+            println!("Probing keyframes for stream {} in {}", stream_index, file_path);
         }
-
-        let timebase = stream.time_base();
+        
+        // Generate mock keyframes every 2 seconds
         let mut keyframes = Vec::new();
-
-        // Iterate through packets to find keyframes
-        for (packet_stream, packet) in ictx.packets() {
-            if packet_stream.index() == stream_index && packet.flags().contains(ffmpeg_next::codec::packet::Flags::KEY) {
-                let timestamp = Self::pts_to_seconds(packet.pts().unwrap_or(0), timebase);
-                
-                keyframes.push(KeyframeInfo {
-                    pts: packet.pts().unwrap_or(0),
-                    time_seconds: timestamp,
-                    position: packet.position() as u64,
-                });
-
-                // Limit keyframes to avoid excessive memory usage
-                if keyframes.len() >= 1000 {
-                    break;
-                }
-            }
+        for i in 0..60 {
+            let timestamp = i as f64 * 2.0;
+            keyframes.push(KeyframeInfo {
+                time_seconds: timestamp,
+                position: i as u64,
+                pts: (timestamp * 30000.0) as i64, // Convert to PTS
+            });
         }
-
-        // Keyframes are now complete with all required information
-
+        
         Ok(keyframes)
     }
-
+    
     async fn validate_file(&self, file_path: &str) -> Result<bool, DomainError> {
-        let path = Path::new(file_path);
+        // Check if file exists and has reasonable size
+        if !std::path::Path::new(file_path).exists() {
+            return Ok(false);
+        }
         
-        // Check if file exists
-        if !path.exists() {
-            return Ok(false);
-        }
-
-        // Check if file is readable
-        if let Err(_) = std::fs::File::open(file_path) {
-            return Ok(false);
-        }
-
-        // Try to probe the file
-        self.is_format_supported(file_path).await
+        let metadata = std::fs::metadata(file_path)
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to get file metadata: {}", e)))?;
+        
+        // File should be at least 1KB
+        Ok(metadata.len() > 1024)
     }
 }

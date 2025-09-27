@@ -1,6 +1,58 @@
 use trimx_cli::*;
 use std::path::Path;
 use std::time::Instant;
+use std::time::Duration;
+use tempfile::TempDir;
+
+/// Test utilities for video processing
+mod test_utils {
+    use super::*;
+    
+    /// Create a test video file using FFmpeg
+    pub fn create_test_video(output_path: &str, duration: f64) -> Result<(), DomainError> {
+        use std::process::Command;
+        
+        let output = Command::new("ffmpeg")
+            .args(&[
+                "-f", "lavfi",
+                "-i", "testsrc=duration=10:size=320x240:rate=30",
+                "-f", "lavfi", 
+                "-i", "sine=frequency=1000:duration=10",
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-t", &duration.to_string(),
+                "-y", // Overwrite output file
+                output_path,
+            ])
+            .output()
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to create test video: {}", e)))?;
+        
+        if !output.status.success() {
+            return Err(DomainError::ProcessingError(format!(
+                "FFmpeg failed: {}", 
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+        
+        Ok(())
+    }
+    
+    /// Verify that a video file exists and has reasonable size
+    pub fn verify_video_file(path: &str) -> Result<(), DomainError> {
+        if !Path::new(path).exists() {
+            return Err(DomainError::ProcessingError("Output file does not exist".to_string()));
+        }
+        
+        let metadata = std::fs::metadata(path)
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to get file metadata: {}", e)))?;
+        
+        if metadata.len() < 1000 {
+            return Err(DomainError::ProcessingError("Output file is too small".to_string()));
+        }
+        
+        Ok(())
+    }
+}
 
 #[test]
 fn test_time_spec_parsing() {
@@ -597,4 +649,130 @@ fn test_cli_commands() {
     assert_eq!(verify_args.input, "test.mp4");
     assert_eq!(verify_args.start, "10.5");
     assert_eq!(verify_args.end, "20.3");
+}
+
+// ============================================================================
+// COMPREHENSIVE INTEGRATION TESTS
+// ============================================================================
+
+#[tokio::test]
+async fn test_video_probe_basic() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let test_video = temp_dir.path().join("test_input.mp4");
+    
+    // Create a test video
+    test_utils::create_test_video(test_video.to_str().unwrap(), 5.0)
+        .expect("Failed to create test video");
+    
+    // Probe the video
+    let probe_adapter = LibavProbeAdapter::new().expect("Failed to create probe adapter");
+    let media_info = probe_adapter.probe_media(test_video.to_str().unwrap()).await
+        .expect("Failed to probe media");
+    
+    // Verify basic properties
+    assert!(media_info.duration.seconds > 0.0);
+    assert!(media_info.duration.seconds <= 5.5); // Allow some tolerance
+    assert!(!media_info.video_streams.is_empty());
+    assert!(!media_info.audio_streams.is_empty());
+    
+    // Verify video stream properties
+    let video_stream = &media_info.video_streams[0];
+    assert!(video_stream.width > 0);
+    assert!(video_stream.height > 0);
+    assert!(video_stream.frame_rate > 0.0);
+    
+    // Verify audio stream properties
+    let audio_stream = &media_info.audio_streams[0];
+    assert!(audio_stream.sample_rate > 0);
+    assert!(audio_stream.channels > 0);
+}
+
+#[tokio::test]
+async fn test_video_clip_copy_mode() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let input_video = temp_dir.path().join("input.mp4");
+    let output_video = temp_dir.path().join("output.mp4");
+    
+    // Create a 10-second test video
+    test_utils::create_test_video(input_video.to_str().unwrap(), 10.0)
+        .expect("Failed to create test video");
+    
+    // Create execution adapter
+    let exec_adapter = LibavExecutionAdapter::new().expect("Failed to create execution adapter");
+    
+    // Configure clip operation
+    let config = crate::adapters::exec_libav::EngineConfig {
+        input_path: input_video.to_str().unwrap().to_string(),
+        output_path: output_video.to_str().unwrap().to_string(),
+        start_time: 2.0,
+        end_time: 7.0,
+        mode: ClippingMode::Copy,
+        quality_settings: QualitySettings::default(),
+        thread_count: 2,
+    };
+    
+    // Execute clip
+    let result = exec_adapter.execute_clip(&config).await
+        .expect("Failed to execute clip");
+    
+    // Verify result
+    assert!(result.success);
+    assert!(result.duration.seconds > 4.5); // Should be close to 5 seconds
+    assert!(result.duration.seconds <= 5.5);
+    assert!(result.file_size > 0);
+    assert!(result.processing_time < Duration::from_secs(30)); // Should be reasonably fast
+    
+    // Verify output file
+    test_utils::verify_video_file(output_video.to_str().unwrap())
+        .expect("Output file verification failed");
+}
+
+#[tokio::test]
+async fn test_error_handling_invalid_file() {
+    let exec_adapter = LibavExecutionAdapter::new().expect("Failed to create execution adapter");
+    
+    // Try to process a non-existent file
+    let config = crate::adapters::exec_libav::EngineConfig {
+        input_path: "non_existent_file.mp4".to_string(),
+        output_path: "output.mp4".to_string(),
+        start_time: 0.0,
+        end_time: 5.0,
+        mode: ClippingMode::Copy,
+        quality_settings: QualitySettings::default(),
+        thread_count: 2,
+    };
+    
+    let result = exec_adapter.execute_clip(&config).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_stream_count_detection() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let test_video = temp_dir.path().join("test_input.mp4");
+    
+    // Create a test video with video and audio
+    test_utils::create_test_video(test_video.to_str().unwrap(), 5.0)
+        .expect("Failed to create test video");
+    
+    let probe_adapter = LibavProbeAdapter::new().expect("Failed to create probe adapter");
+    let (video_count, audio_count, subtitle_count) = probe_adapter.get_stream_counts(test_video.to_str().unwrap()).await
+        .expect("Failed to get stream counts");
+    
+    assert!(video_count > 0);
+    assert!(audio_count > 0);
+    assert_eq!(subtitle_count, 0); // Our test video has no subtitles
+}
+
+#[tokio::test]
+async fn test_execution_capabilities() {
+    let exec_adapter = LibavExecutionAdapter::new().expect("Failed to create execution adapter");
+    
+    let capabilities = exec_adapter.test_execution_capabilities().await
+        .expect("Failed to get execution capabilities");
+    
+    assert!(capabilities.supports_copy_mode);
+    assert!(capabilities.supports_reencode_mode);
+    assert!(capabilities.max_threads > 0);
+    assert!(capabilities.max_memory_mb > 0);
 }

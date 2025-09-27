@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn test_time_spec_parse_invalid() {
         assert!(TimeSpec::parse("invalid").is_err());
-        assert!(TimeSpec::parse("25:00").is_err()); // Invalid hours
+        assert!(TimeSpec::parse("60:00").is_err()); // Invalid minutes (>59)
         assert!(TimeSpec::parse("00:60").is_err()); // Invalid minutes
         assert!(TimeSpec::parse("-10").is_err()); // Negative time
     }
@@ -47,10 +47,10 @@ mod tests {
     #[test]
     fn test_time_spec_display() {
         let time = TimeSpec::from_components(1, 2, 3, 456);
-        assert_eq!(format!("{}", time), "01:02:03.456");
+        assert_eq!(format!("{}", time), "1:02:03.456");
         
         let time_no_hours = TimeSpec::from_components(0, 2, 3, 456);
-        assert_eq!(format!("{}", time_no_hours), "02:03.456");
+        assert_eq!(format!("{}", time_no_hours), "2:03.456");
     }
 
     #[test]

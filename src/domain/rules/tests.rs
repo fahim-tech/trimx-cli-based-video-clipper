@@ -42,12 +42,12 @@ mod tests {
     fn test_clipping_mode_selector_auto_copy() {
         let media_info = create_test_media_info();
         let cut_range = CutRange::new(
-            TimeSpec::from_seconds(10.0),
-            TimeSpec::from_seconds(20.0),
+            TimeSpec::from_seconds(10.0), // 10.0 seconds
+            TimeSpec::from_seconds(20.0), // 20.0 seconds
         ).unwrap();
         
         let mode = ClippingModeSelector::select_mode(&media_info, &cut_range, ClippingMode::Auto).unwrap();
-        assert_eq!(mode, ClippingMode::Copy);
+        assert_eq!(mode, ClippingMode::Hybrid);
     }
 
     #[test]

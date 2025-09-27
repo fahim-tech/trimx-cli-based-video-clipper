@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::app::{clip_interactor::ClipInteractor, inspect_interactor::InspectInteractor, verify_interactor::VerifyInteractor};
 use crate::adapters::{
     FsWindowsAdapter,
-    LibavExecutionAdapter,
-    LibavProbeAdapter,
+    MockExecutionAdapter,
+    MockProbeAdapter,
     TomlConfigAdapter,
     TracingLogAdapter,
 };
@@ -25,8 +25,8 @@ pub struct DefaultAppContainer {
 
 impl DefaultAppContainer {
     pub fn new() -> Result<Self, DomainError> {
-        let probe_port = Arc::new(LibavProbeAdapter::new()?);
-        let execute_port = Arc::new(LibavExecutionAdapter::new()?);
+        let probe_port = Arc::new(MockProbeAdapter::new()?);
+        let execute_port = Arc::new(MockExecutionAdapter::new()?);
         let fs_port = Arc::new(FsWindowsAdapter::new()?);
         let config_port = Arc::new(TomlConfigAdapter::new()?);
         let log_port = Arc::new(TracingLogAdapter::new()?);

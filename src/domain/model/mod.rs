@@ -81,6 +81,9 @@ impl TimeSpec {
             let seconds_part = parts[1].parse::<f64>()
                 .map_err(|_| DomainError::BadArgs("Invalid seconds format".to_string()))?;
             
+            if minutes >= 60 {
+                return Err(DomainError::BadArgs("Minutes must be less than 60".to_string()));
+            }
             if seconds_part >= 60.0 {
                 return Err(DomainError::BadArgs("Seconds must be less than 60".to_string()));
             }
