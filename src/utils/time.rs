@@ -11,7 +11,15 @@ impl TimeParser {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for TimeParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TimeParser {
     /// Parse time string to seconds
     pub fn parse_time(&self, time_str: &str) -> TrimXResult<f64> {
         let time_str = time_str.trim();
@@ -53,13 +61,17 @@ impl TimeParser {
             });
         }
 
-        let minutes: f64 = parts[0].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let minutes: f64 = parts[0]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
-        let seconds: f64 = parts[1].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let seconds: f64 = parts[1]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
         Ok(minutes * 60.0 + seconds)
     }
@@ -73,13 +85,17 @@ impl TimeParser {
             });
         }
 
-        let minutes: f64 = parts[0].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let minutes: f64 = parts[0]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
-        let seconds_ms: f64 = parts[1].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let seconds_ms: f64 = parts[1]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
         Ok(minutes * 60.0 + seconds_ms)
     }
@@ -93,17 +109,23 @@ impl TimeParser {
             });
         }
 
-        let hours: f64 = parts[0].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let hours: f64 = parts[0]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
-        let minutes: f64 = parts[1].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let minutes: f64 = parts[1]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
-        let seconds_ms: f64 = parts[2].parse().map_err(|_| TrimXError::InvalidTimeFormat {
-            time: time_str.to_string(),
-        })?;
+        let seconds_ms: f64 = parts[2]
+            .parse()
+            .map_err(|_| TrimXError::InvalidTimeFormat {
+                time: time_str.to_string(),
+            })?;
 
         Ok(hours * 3600.0 + minutes * 60.0 + seconds_ms)
     }
@@ -116,7 +138,10 @@ impl TimeParser {
         let milliseconds = ((seconds % 1.0) * 1000.0) as u32;
 
         if hours > 0 {
-            format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, secs, milliseconds)
+            format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                hours, minutes, secs, milliseconds
+            )
         } else {
             format!("{:02}:{:02}.{:03}", minutes, secs, milliseconds)
         }

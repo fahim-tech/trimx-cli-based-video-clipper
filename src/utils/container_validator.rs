@@ -1,9 +1,9 @@
 //! Container format validation and compatibility checking
 
+use crate::error::{TrimXError, TrimXResult};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use tracing::{info, debug};
-use crate::error::{TrimXError, TrimXResult};
+use tracing::{debug, info};
 
 /// Container format validator
 pub struct ContainerValidator {
@@ -82,11 +82,19 @@ impl ContainerValidator {
             supported_inputs: HashSet::new(),
             supported_outputs: HashSet::new(),
         };
-        
+
         validator.initialize_compatibility_matrix();
         validator
     }
+}
 
+impl Default for ContainerValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContainerValidator {
     /// Enable debug logging
     pub fn with_debug(mut self) -> Self {
         self.debug = true;
@@ -104,8 +112,10 @@ impl ContainerValidator {
         mp4_codecs.insert("aac".to_string());
         mp4_codecs.insert("mp3".to_string());
         mp4_codecs.insert("ac3".to_string());
-        self.codec_compatibility.insert("mp4".to_string(), mp4_codecs.clone());
-        self.codec_compatibility.insert("mov".to_string(), mp4_codecs.clone());
+        self.codec_compatibility
+            .insert("mp4".to_string(), mp4_codecs.clone());
+        self.codec_compatibility
+            .insert("mov".to_string(), mp4_codecs.clone());
 
         // MKV container compatibility (very flexible)
         let mut mkv_codecs = HashSet::new();
@@ -122,7 +132,8 @@ impl ContainerValidator {
         mkv_codecs.insert("flac".to_string());
         mkv_codecs.insert("ac3".to_string());
         mkv_codecs.insert("dts".to_string());
-        self.codec_compatibility.insert("mkv".to_string(), mkv_codecs);
+        self.codec_compatibility
+            .insert("mkv".to_string(), mkv_codecs);
 
         // WebM container compatibility
         let mut webm_codecs = HashSet::new();
@@ -131,7 +142,8 @@ impl ContainerValidator {
         webm_codecs.insert("av1".to_string());
         webm_codecs.insert("vorbis".to_string());
         webm_codecs.insert("opus".to_string());
-        self.codec_compatibility.insert("webm".to_string(), webm_codecs);
+        self.codec_compatibility
+            .insert("webm".to_string(), webm_codecs);
 
         // AVI container compatibility
         let mut avi_codecs = HashSet::new();
@@ -141,7 +153,8 @@ impl ContainerValidator {
         avi_codecs.insert("mp3".to_string());
         avi_codecs.insert("ac3".to_string());
         avi_codecs.insert("pcm".to_string());
-        self.codec_compatibility.insert("avi".to_string(), avi_codecs);
+        self.codec_compatibility
+            .insert("avi".to_string(), avi_codecs);
 
         // Initialize supported formats
         self.supported_inputs.insert("mp4".to_string());
@@ -162,7 +175,11 @@ impl ContainerValidator {
     }
 
     /// Validate container format compatibility
-    pub fn validate_formats(&self, input_path: &str, output_path: &str) -> TrimXResult<ValidationResult> {
+    pub fn validate_formats(
+        &self,
+        input_path: &str,
+        output_path: &str,
+    ) -> TrimXResult<ValidationResult> {
         info!("Validating container format compatibility");
         debug!("Input: {}", input_path);
         debug!("Output: {}", output_path);
@@ -179,7 +196,7 @@ impl ContainerValidator {
         // Detect input format
         let input_format = self.detect_format_from_file(input_path)?;
         result.input_format = Some(input_format.clone());
-        
+
         // Detect output format
         let output_format = self.detect_format_from_extension(output_path)?;
         result.output_format = Some(output_format.clone());
@@ -187,7 +204,8 @@ impl ContainerValidator {
         // Check input format support
         if !self.supported_inputs.contains(&input_format.format) {
             result.errors.push(format!(
-                "Input format '{}' is not supported", input_format.format
+                "Input format '{}' is not supported",
+                input_format.format
             ));
             result.valid = false;
         }
@@ -195,7 +213,8 @@ impl ContainerValidator {
         // Check output format support
         if !self.supported_outputs.contains(&output_format.format) {
             result.errors.push(format!(
-                "Output format '{}' is not supported", output_format.format
+                "Output format '{}' is not supported",
+                output_format.format
             ));
             result.valid = false;
         }
@@ -209,8 +228,11 @@ impl ContainerValidator {
         // Generate recommendations
         self.generate_recommendations(&input_format, &output_format, &mut result);
 
-        info!("Format validation complete: {} errors, {} warnings", 
-              result.errors.len(), result.warnings.len());
+        info!(
+            "Format validation complete: {} errors, {} warnings",
+            result.errors.len(),
+            result.warnings.len()
+        );
 
         Ok(result)
     }
@@ -219,13 +241,13 @@ impl ContainerValidator {
     fn detect_format_from_file(&self, file_path: &str) -> TrimXResult<ContainerInfo> {
         // Initialize FFmpeg
         ffmpeg_next::init().map_err(|e| TrimXError::ClippingError {
-            message: format!("Failed to initialize FFmpeg: {}", e)
+            message: format!("Failed to initialize FFmpeg: {}", e),
         })?;
 
         // Open file to detect format
-        let input_ctx = ffmpeg_next::format::input(file_path)
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to open input file: {}", e)
+        let input_ctx =
+            ffmpeg_next::format::input(file_path).map_err(|e| TrimXError::ClippingError {
+                message: format!("Failed to open input file: {}", e),
             })?;
 
         let format = input_ctx.format();
@@ -238,7 +260,7 @@ impl ContainerValidator {
 
         for stream in input_ctx.streams() {
             let codec_name = stream.parameters().id().name().to_string();
-            
+
             match stream.parameters().medium() {
                 ffmpeg_next::media::Type::Video => {
                     if !video_codecs.contains(&codec_name) {
@@ -261,7 +283,7 @@ impl ContainerValidator {
             video_codecs,
             audio_codecs,
             supports_stream_copy: true, // Most formats support stream copy
-            max_streams: None, // Would need format-specific logic
+            max_streams: None,          // Would need format-specific logic
             capabilities: self.get_format_capabilities(format_name),
         })
     }
@@ -269,11 +291,12 @@ impl ContainerValidator {
     /// Detect format from file extension
     fn detect_format_from_extension(&self, file_path: &str) -> TrimXResult<ContainerInfo> {
         let path = Path::new(file_path);
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .map(|s| s.to_lowercase())
             .ok_or_else(|| TrimXError::ClippingError {
-                message: "Could not determine output format from file extension".to_string()
+                message: "Could not determine output format from file extension".to_string(),
             })?;
 
         let format_name = match extension.as_str() {
@@ -282,24 +305,33 @@ impl ContainerValidator {
             "mkv" => "mkv",
             "webm" => "webm",
             "avi" => "avi",
-            _ => return Err(TrimXError::ClippingError {
-                message: format!("Unsupported output format: {}", extension)
-            })
+            _ => {
+                return Err(TrimXError::ClippingError {
+                    message: format!("Unsupported output format: {}", extension),
+                })
+            }
         };
 
-        let compatible_codecs = self.codec_compatibility.get(format_name).cloned()
+        let compatible_codecs = self
+            .codec_compatibility
+            .get(format_name)
+            .cloned()
             .unwrap_or_else(HashSet::new);
 
         Ok(ContainerInfo {
             format: format_name.to_string(),
             description: self.get_format_description(format_name),
             extensions: vec![extension],
-            video_codecs: compatible_codecs.iter()
+            video_codecs: compatible_codecs
+                .iter()
                 .filter(|codec| self.is_video_codec(codec))
-                .cloned().collect(),
-            audio_codecs: compatible_codecs.iter()
+                .cloned()
+                .collect(),
+            audio_codecs: compatible_codecs
+                .iter()
                 .filter(|codec| self.is_audio_codec(codec))
-                .cloned().collect(),
+                .cloned()
+                .collect(),
             supports_stream_copy: true,
             max_streams: None,
             capabilities: self.get_format_capabilities(format_name),
@@ -307,9 +339,17 @@ impl ContainerValidator {
     }
 
     /// Check codec compatibility between input and output
-    fn check_codec_compatibility(&self, input: &ContainerInfo, output: &ContainerInfo, result: &mut ValidationResult) {
-        let output_compatible_codecs = self.codec_compatibility.get(&output.format)
-            .cloned().unwrap_or_else(HashSet::new);
+    fn check_codec_compatibility(
+        &self,
+        input: &ContainerInfo,
+        output: &ContainerInfo,
+        result: &mut ValidationResult,
+    ) {
+        let output_compatible_codecs = self
+            .codec_compatibility
+            .get(&output.format)
+            .cloned()
+            .unwrap_or_else(HashSet::new);
 
         // Check video codec compatibility
         for video_codec in &input.video_codecs {
@@ -321,7 +361,7 @@ impl ContainerValidator {
             }
         }
 
-        // Check audio codec compatibility  
+        // Check audio codec compatibility
         for audio_codec in &input.audio_codecs {
             if !output_compatible_codecs.contains(audio_codec) {
                 result.warnings.push(format!(
@@ -333,48 +373,61 @@ impl ContainerValidator {
     }
 
     /// Check format-specific limitations
-    fn check_format_limitations(&self, input: &ContainerInfo, output: &ContainerInfo, result: &mut ValidationResult) {
+    fn check_format_limitations(
+        &self,
+        input: &ContainerInfo,
+        output: &ContainerInfo,
+        result: &mut ValidationResult,
+    ) {
         // Check for lossy format conversions
         if input.format == "mkv" && output.format == "mp4" {
             result.warnings.push(
-                "Converting from MKV to MP4 may lose some subtitle or metadata information".to_string()
+                "Converting from MKV to MP4 may lose some subtitle or metadata information"
+                    .to_string(),
             );
         }
 
         if input.format == "avi" && (output.format == "mp4" || output.format == "mkv") {
             result.recommendations.push(
-                "Consider using MP4 or MKV for better compatibility and features".to_string()
+                "Consider using MP4 or MKV for better compatibility and features".to_string(),
             );
         }
 
         // Check for stream copy limitations
         if !output.supports_stream_copy {
             result.warnings.push(format!(
-                "Output format '{}' may not support lossless stream copying", output.format
+                "Output format '{}' may not support lossless stream copying",
+                output.format
             ));
         }
     }
 
     /// Generate format recommendations
-    fn generate_recommendations(&self, input: &ContainerInfo, output: &ContainerInfo, result: &mut ValidationResult) {
+    fn generate_recommendations(
+        &self,
+        input: &ContainerInfo,
+        output: &ContainerInfo,
+        result: &mut ValidationResult,
+    ) {
         // Recommend MP4 for broad compatibility
         if output.format != "mp4" && input.video_codecs.contains(&"h264".to_string()) {
             result.recommendations.push(
-                "Consider using MP4 format for maximum compatibility across devices and players".to_string()
+                "Consider using MP4 format for maximum compatibility across devices and players"
+                    .to_string(),
             );
         }
 
         // Recommend MKV for advanced features
         if input.capabilities.supports_subtitles && !output.capabilities.supports_subtitles {
-            result.recommendations.push(
-                "Consider using MKV format to preserve subtitle streams".to_string()
-            );
+            result
+                .recommendations
+                .push("Consider using MKV format to preserve subtitle streams".to_string());
         }
 
         // Recommend keeping same format if compatible
         if input.format != output.format && self.supported_outputs.contains(&input.format) {
             result.recommendations.push(format!(
-                "Consider keeping original {} format to avoid potential compatibility issues", 
+                "Consider keeping original {} format to avoid potential compatibility issues",
                 input.format
             ));
         }
@@ -449,10 +502,16 @@ impl ContainerValidator {
     }
 
     fn is_video_codec(&self, codec: &str) -> bool {
-        matches!(codec, "h264" | "h265" | "hevc" | "vp8" | "vp9" | "av1" | "mpeg4" | "xvid")
+        matches!(
+            codec,
+            "h264" | "h265" | "hevc" | "vp8" | "vp9" | "av1" | "mpeg4" | "xvid"
+        )
     }
 
     fn is_audio_codec(&self, codec: &str) -> bool {
-        matches!(codec, "aac" | "mp3" | "ac3" | "dts" | "vorbis" | "opus" | "flac" | "pcm")
+        matches!(
+            codec,
+            "aac" | "mp3" | "ac3" | "dts" | "vorbis" | "opus" | "flac" | "pcm"
+        )
     }
 }

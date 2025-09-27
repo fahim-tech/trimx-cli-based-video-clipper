@@ -1,6 +1,5 @@
 //! Stream processing implementation
 
-
 /// Stream processor for handling video/audio streams
 pub struct StreamProcessor;
 
@@ -10,7 +9,15 @@ impl StreamProcessor {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for StreamProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StreamProcessor {
     /// Get optimal thread count
     pub fn get_thread_count(&self) -> usize {
         num_cpus::get().min(16)

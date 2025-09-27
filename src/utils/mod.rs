@@ -1,13 +1,12 @@
 //! Common utilities and helpers
 
-
 pub mod container_validator;
 pub mod logging;
 pub mod memory_manager;
 use std::time::Duration;
 
-pub mod time;
 pub mod path;
+pub mod time;
 
 /// Utility functions for TrimX
 pub struct Utils;
@@ -18,7 +17,15 @@ impl Utils {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for Utils {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Utils {
     /// Format duration for display
     pub fn format_duration(duration: Duration) -> String {
         let total_seconds = duration.as_secs();
@@ -28,7 +35,10 @@ impl Utils {
         let milliseconds = duration.subsec_millis();
 
         if hours > 0 {
-            format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, milliseconds)
+            format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                hours, minutes, seconds, milliseconds
+            )
         } else {
             format!("{:02}:{:02}.{:03}", minutes, seconds, milliseconds)
         }
@@ -73,7 +83,7 @@ impl Utils {
 
         let rate = current as f64 / elapsed.as_secs_f64();
         let remaining = (total - current) as f64 / rate;
-        
+
         Some(Duration::from_secs_f64(remaining))
     }
 }

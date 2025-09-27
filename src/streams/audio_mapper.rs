@@ -1,7 +1,7 @@
 //! Audio stream mapping and selection logic
 
-use tracing::{info, debug, warn};
 use crate::error::{TrimXError, TrimXResult};
+use tracing::{debug, info, warn};
 // Note: In production, would import from domain model
 // use crate::domain::model::{AudioStreamInfo, MediaInfo};
 
@@ -17,7 +17,7 @@ pub struct AudioStreamInfo {
 }
 
 /// Placeholder for MediaInfo
-#[derive(Debug, Clone)]  
+#[derive(Debug, Clone)]
 pub struct MediaInfo {
     pub audio_streams: Vec<AudioStreamInfo>,
 }
@@ -122,7 +122,15 @@ impl AudioMapper {
     pub fn new() -> Self {
         Self { debug: false }
     }
+}
 
+impl Default for AudioMapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AudioMapper {
     /// Enable debug logging
     pub fn with_debug(mut self) -> Self {
         self.debug = true;
@@ -140,7 +148,10 @@ impl AudioMapper {
             return Ok(Vec::new());
         }
 
-        debug!("Creating audio mappings for {} streams", media_info.audio_streams.len());
+        debug!(
+            "Creating audio mappings for {} streams",
+            media_info.audio_streams.len()
+        );
 
         let mut mappings = Vec::new();
 
@@ -149,7 +160,8 @@ impl AudioMapper {
             mappings = self.map_all_streams(&media_info.audio_streams, config)?;
         } else if let Some(ref selected_indices) = config.selected_streams {
             // Map specific streams
-            mappings = self.map_selected_streams(&media_info.audio_streams, selected_indices, config)?;
+            mappings =
+                self.map_selected_streams(&media_info.audio_streams, selected_indices, config)?;
         } else if config.auto_select_best {
             // Auto-select best streams
             mappings = self.auto_select_streams(&media_info.audio_streams, config)?;
@@ -232,10 +244,10 @@ impl AudioMapper {
             let language = stream.language.as_deref().unwrap_or("unknown");
 
             // Include first stream of each language, or if no language preference
-            if config.language_preference.is_empty() 
-                || !languages_seen.contains(language) 
-                || mappings.is_empty() {
-
+            if config.language_preference.is_empty()
+                || !languages_seen.contains(language)
+                || mappings.is_empty()
+            {
                 let mapping = AudioMapping {
                     input_index,
                     output_index: mappings.len(),
@@ -278,46 +290,50 @@ impl AudioMapper {
     }
 
     /// Calculate quality score for stream selection
-    fn calculate_quality_score(&self, stream: &AudioStreamInfo, config: &AudioMappingConfig) -> f64 {
+    fn calculate_quality_score(
+        &self,
+        stream: &AudioStreamInfo,
+        config: &AudioMappingConfig,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Codec quality score
         score += match stream.codec.as_str() {
-            "flac" | "alac" => 100.0,      // Lossless
-            "aac" => 90.0,                 // High quality lossy
-            "vorbis" | "opus" => 85.0,     // Good quality lossy
-            "mp3" => 70.0,                 // Standard quality
-            "ac3" => 60.0,                 // Surround sound
-            "dts" => 80.0,                 // High quality surround
-            _ => 50.0,                     // Unknown/other
+            "flac" | "alac" => 100.0,  // Lossless
+            "aac" => 90.0,             // High quality lossy
+            "vorbis" | "opus" => 85.0, // Good quality lossy
+            "mp3" => 70.0,             // Standard quality
+            "ac3" => 60.0,             // Surround sound
+            "dts" => 80.0,             // High quality surround
+            _ => 50.0,                 // Unknown/other
         };
 
         // Bit rate score
         if let Some(bitrate) = stream.bit_rate {
             score += match bitrate {
-                br if br >= 320000 => 20.0,    // High bitrate
-                br if br >= 192000 => 15.0,    // Good bitrate
-                br if br >= 128000 => 10.0,    // Acceptable bitrate
-                _ => 5.0,                      // Low bitrate
+                br if br >= 320000 => 20.0, // High bitrate
+                br if br >= 192000 => 15.0, // Good bitrate
+                br if br >= 128000 => 10.0, // Acceptable bitrate
+                _ => 5.0,                   // Low bitrate
             };
         }
 
         // Channel count score
         score += match stream.channels {
-            8 | 7 => 15.0,     // 7.1 surround
-            6 => 12.0,         // 5.1 surround
-            4 => 8.0,          // Quadraphonic
-            2 => 10.0,         // Stereo (most compatible)
-            1 => 5.0,          // Mono
-            _ => 3.0,          // Other
+            8 | 7 => 15.0, // 7.1 surround
+            6 => 12.0,     // 5.1 surround
+            4 => 8.0,      // Quadraphonic
+            2 => 10.0,     // Stereo (most compatible)
+            1 => 5.0,      // Mono
+            _ => 3.0,      // Other
         };
 
         // Sample rate score
         score += match stream.sample_rate {
-            96000 | 192000 => 10.0,    // High sample rate
-            48000 => 8.0,              // Standard professional
-            44100 => 7.0,              // CD quality
-            _ => 5.0,                  // Other
+            96000 | 192000 => 10.0, // High sample rate
+            48000 => 8.0,           // Standard professional
+            44100 => 7.0,           // CD quality
+            _ => 5.0,               // Other
         };
 
         // Language preference score
@@ -335,7 +351,11 @@ impl AudioMapper {
     }
 
     /// Determine processing mode for a stream
-    fn determine_processing_mode(&self, stream: &AudioStreamInfo, config: &AudioMappingConfig) -> AudioProcessingMode {
+    fn determine_processing_mode(
+        &self,
+        stream: &AudioStreamInfo,
+        config: &AudioMappingConfig,
+    ) -> AudioProcessingMode {
         // Check if transcoding is requested
         if let Some(ref target_codec) = config.target_codec {
             if target_codec != &stream.codec {
@@ -378,7 +398,7 @@ impl AudioMapper {
         // Check for conflicting options
         if config.include_all && config.selected_streams.is_some() {
             return Err(TrimXError::ClippingError {
-                message: "Cannot specify both include_all and selected_streams".to_string()
+                message: "Cannot specify both include_all and selected_streams".to_string(),
             });
         }
 
@@ -386,7 +406,7 @@ impl AudioMapper {
         if let Some(ref indices) = config.selected_streams {
             if indices.is_empty() {
                 return Err(TrimXError::ClippingError {
-                    message: "Selected streams list cannot be empty".to_string()
+                    message: "Selected streams list cannot be empty".to_string(),
                 });
             }
         }
@@ -395,7 +415,7 @@ impl AudioMapper {
         if let Some(ref channel_config) = config.channel_config {
             if channel_config.channels == 0 || channel_config.channels > 8 {
                 return Err(TrimXError::ClippingError {
-                    message: format!("Invalid channel count: {}", channel_config.channels)
+                    message: format!("Invalid channel count: {}", channel_config.channels),
                 });
             }
         }
@@ -406,11 +426,7 @@ impl AudioMapper {
     /// Get supported audio codecs for container format
     pub fn get_supported_codecs(&self, container_format: &str) -> Vec<String> {
         match container_format.to_lowercase().as_str() {
-            "mp4" | "m4v" | "mov" => vec![
-                "aac".to_string(),
-                "mp3".to_string(),
-                "ac3".to_string(),
-            ],
+            "mp4" | "m4v" | "mov" => vec!["aac".to_string(), "mp3".to_string(), "ac3".to_string()],
             "mkv" => vec![
                 "aac".to_string(),
                 "mp3".to_string(),
@@ -420,15 +436,8 @@ impl AudioMapper {
                 "ac3".to_string(),
                 "dts".to_string(),
             ],
-            "webm" => vec![
-                "vorbis".to_string(),
-                "opus".to_string(),
-            ],
-            "avi" => vec![
-                "mp3".to_string(),
-                "ac3".to_string(),
-                "pcm".to_string(),
-            ],
+            "webm" => vec!["vorbis".to_string(), "opus".to_string()],
+            "avi" => vec!["mp3".to_string(), "ac3".to_string(), "pcm".to_string()],
             _ => vec!["aac".to_string()], // Default fallback
         }
     }
@@ -436,29 +445,35 @@ impl AudioMapper {
     /// Generate mapping summary report
     pub fn generate_report(&self, mappings: &[AudioMapping]) -> String {
         let mut report = String::new();
-        
+
         report.push_str("Audio Stream Mapping Report:\n");
         report.push_str(&format!("  Total mappings: {}\n", mappings.len()));
-        
+
         for (index, mapping) in mappings.iter().enumerate() {
             report.push_str(&format!("\n  Stream {}:\n", index));
             report.push_str(&format!("    Input Index: {}\n", mapping.input_index));
             report.push_str(&format!("    Codec: {}\n", mapping.stream_info.codec));
             report.push_str(&format!("    Channels: {}\n", mapping.stream_info.channels));
-            report.push_str(&format!("    Sample Rate: {} Hz\n", mapping.stream_info.sample_rate));
-            
+            report.push_str(&format!(
+                "    Sample Rate: {} Hz\n",
+                mapping.stream_info.sample_rate
+            ));
+
             if let Some(bitrate) = mapping.stream_info.bit_rate {
                 report.push_str(&format!("    Bitrate: {} bps\n", bitrate));
             }
-            
+
             if let Some(ref language) = mapping.stream_info.language {
                 report.push_str(&format!("    Language: {}\n", language));
             }
-            
+
             report.push_str(&format!("    Processing: {:?}\n", mapping.processing_mode));
-            report.push_str(&format!("    Quality Score: {:.1}\n", mapping.quality_score));
+            report.push_str(&format!(
+                "    Quality Score: {:.1}\n",
+                mapping.quality_score
+            ));
         }
-        
+
         report
     }
 }

@@ -1,9 +1,11 @@
 //! Stream mapping utilities
 
-use crate::streams::{StreamMapping, VideoStreamMapping, AudioStreamMapping, SubtitleStreamMapping};
-use crate::streams::{VideoProcessingMode, AudioProcessingMode, SubtitleProcessingMode};
-use crate::probe::MediaInfo;
 use crate::error::{TrimXError, TrimXResult};
+use crate::probe::MediaInfo;
+use crate::streams::{AudioProcessingMode, SubtitleProcessingMode, VideoProcessingMode};
+use crate::streams::{
+    AudioStreamMapping, StreamMapping, SubtitleStreamMapping, VideoStreamMapping,
+};
 
 /// Stream mapper for creating stream mappings
 pub struct StreamMapper;
@@ -14,7 +16,15 @@ impl StreamMapper {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for StreamMapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StreamMapper {
     /// Create stream mapping from media info
     pub fn create_mapping(
         &self,
