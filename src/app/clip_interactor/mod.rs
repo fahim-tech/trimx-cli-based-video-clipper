@@ -227,7 +227,7 @@ impl ClipInteractor {
     }
     
     /// Determine container format for output
-    fn determine_container_format(&self, input_file: &str, media_info: &MediaInfo) -> Result<String, DomainError> {
+    fn determine_container_format(&self, _input_file: &str, media_info: &MediaInfo) -> Result<String, DomainError> {
         // Use same format as input for now
         Ok(media_info.container.clone())
     }
@@ -263,11 +263,18 @@ impl ClipRequest {
         }
         
         Ok(Self {
+            input_path: input_file.clone(),
             input_file,
+            output_path: output_file.clone(),
             output_file,
+            start_time: String::new(),
+            end_time: String::new(),
             cut_range,
             mode,
+            quality: None,
             quality_settings: None,
+            overwrite: false,
+            threads: None,
         })
     }
     
@@ -284,11 +291,18 @@ impl ClipRequest {
         }
         
         Ok(Self {
+            input_path: input_file.clone(),
             input_file,
+            output_path: output_file.clone(),
             output_file,
+            start_time: String::new(),
+            end_time: String::new(),
             cut_range,
             mode,
+            quality: None,
             quality_settings: Some(quality_settings),
+            overwrite: false,
+            threads: None,
         })
     }
 }

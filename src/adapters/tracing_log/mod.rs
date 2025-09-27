@@ -79,7 +79,7 @@ impl LogPort for TracingLogAdapter {
             return;
         }
         
-        let tracing_level = Self::to_tracing_level(&event.level);
+        let _tracing_level = Self::to_tracing_level(&event.level);
         
         // Log structured event based on level
         match event.level {

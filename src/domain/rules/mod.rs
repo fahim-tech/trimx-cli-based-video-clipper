@@ -65,7 +65,7 @@ impl ClippingModeSelector {
     /// Check if hybrid mode is viable
     fn is_hybrid_mode_viable(
         media_info: &MediaInfo,
-        cut_range: &CutRange,
+        _cut_range: &CutRange,
     ) -> bool {
         // At least video stream should support copy
         if let Some(video_stream) = media_info.primary_video_stream() {

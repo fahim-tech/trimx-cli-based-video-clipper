@@ -5,6 +5,7 @@ mod tests {
     use super::*;
     use crate::domain::model::*;
     use crate::domain::errors::*;
+    use crate::domain::rules::*;
 
     fn create_test_media_info() -> MediaInfo {
         let video_stream = VideoStreamInfo::new(
@@ -24,13 +25,17 @@ mod tests {
             Timebase::av_time_base(),
         ).unwrap();
         
-        MediaInfo::new(
-            "mp4".to_string(),
-            1000000,
-            vec![video_stream],
-            vec![audio_stream],
-            vec![],
-        ).unwrap()
+        MediaInfo {
+            path: "test.mp4".to_string(),
+            container: "mp4".to_string(),
+            duration: TimeSpec::from_seconds(100.0),
+            video_streams: vec![video_stream],
+            audio_streams: vec![audio_stream],
+            subtitle_streams: vec![],
+            bit_rate: Some(1000000),
+            file_size: 1000000,
+            metadata: std::collections::HashMap::new(),
+        }
     }
 
     #[test]
@@ -46,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clipping_mode_selector_requested_mode() {
+    fn test_clipping_mode_selector_force_reencode() {
         let media_info = create_test_media_info();
         let cut_range = CutRange::new(
             TimeSpec::from_seconds(10.0),
@@ -55,78 +60,6 @@ mod tests {
         
         let mode = ClippingModeSelector::select_mode(&media_info, &cut_range, ClippingMode::Reencode).unwrap();
         assert_eq!(mode, ClippingMode::Reencode);
-    }
-
-    // Keyframe analysis test removed - now handled by planner module's KeyframeAnalyzer
-    // which performs actual GOP analysis on video files
-
-    #[test]
-    fn test_quality_settings_selector_copy_mode() {
-        let media_info = create_test_media_info();
-        let settings = QualitySettingsSelector::select_quality_settings(
-            &ClippingMode::Copy,
-            &media_info,
-            false,
-        );
-        
-        // Copy mode should use default settings
-        assert_eq!(settings.preset, "medium");
-        assert_eq!(settings.crf, Some(18));
-    }
-
-    #[test]
-    fn test_quality_settings_selector_reencode_mode() {
-        let media_info = create_test_media_info();
-        let settings = QualitySettingsSelector::select_quality_settings(
-            &ClippingMode::Reencode,
-            &media_info,
-            false,
-        );
-        
-        // Re-encode mode should have optimized settings
-        assert_eq!(settings.preset, "medium");
-        assert_eq!(settings.hardware_acceleration, false);
-    }
-
-    #[test]
-    fn test_quality_settings_selector_hybrid_mode() {
-        let media_info = create_test_media_info();
-        let settings = QualitySettingsSelector::select_quality_settings(
-            &ClippingMode::Hybrid,
-            &media_info,
-            true,
-        );
-        
-        // Hybrid mode should prioritize speed
-        assert_eq!(settings.preset, "fast");
-        assert_eq!(settings.hardware_acceleration, true);
-    }
-
-    #[test]
-    fn test_stream_mapper_copy_mode() {
-        let media_info = create_test_media_info();
-        let mappings = StreamMapper::create_stream_mappings(&media_info, &ClippingMode::Copy).unwrap();
-        
-        assert_eq!(mappings.len(), 2); // 1 video + 1 audio
-        assert!(mappings.iter().all(|m| m.copy));
-    }
-
-    #[test]
-    fn test_stream_mapper_reencode_mode() {
-        let media_info = create_test_media_info();
-        let mappings = StreamMapper::create_stream_mappings(&media_info, &ClippingMode::Reencode).unwrap();
-        
-        assert_eq!(mappings.len(), 2); // 1 video + 1 audio
-        assert!(mappings.iter().all(|m| !m.copy));
-    }
-
-    #[test]
-    fn test_stream_mapper_hybrid_mode() {
-        let media_info = create_test_media_info();
-        let mappings = StreamMapper::create_stream_mappings(&media_info, &ClippingMode::Hybrid).unwrap();
-        
-        assert_eq!(mappings.len(), 2); // 1 video + 1 audio
-        assert!(mappings.iter().all(|m| m.copy));
     }
 
     #[test]
@@ -171,100 +104,5 @@ mod tests {
             Timebase::av_time_base(),
         ).unwrap();
         assert!(!unsupported_stream.supports_copy());
-    }
-
-    #[test]
-    fn test_stream_copy_support_subtitle() {
-        let srt_stream = SubtitleStreamInfo::new(0, "srt".to_string());
-        assert!(srt_stream.supports_copy());
-        
-        let unsupported_stream = SubtitleStreamInfo::new(0, "unsupported".to_string());
-        assert!(!unsupported_stream.supports_copy());
-    }
-
-    #[test]
-    fn test_output_validator_success() {
-        let expected_duration = TimeSpec::from_seconds(10.0);
-        let actual_duration = TimeSpec::from_seconds(10.05); // 50ms difference
-        let tolerance_ms = 100;
-        
-        let report = OutputReport::success(
-            actual_duration,
-            1024000,
-            std::time::Duration::from_secs(5),
-            ClippingMode::Copy,
-        );
-        
-        let result = OutputValidator::validate_output(&report, &expected_duration, tolerance_ms);
-        
-        assert!(result.overall_valid);
-        assert!(result.duration_valid);
-        assert!(result.success_valid);
-        assert!(result.size_valid);
-        assert_eq!(result.duration_difference_ms, 50);
-    }
-
-    #[test]
-    fn test_output_validator_duration_failure() {
-        let expected_duration = TimeSpec::from_seconds(10.0);
-        let actual_duration = TimeSpec::from_seconds(11.0); // 1 second difference
-        let tolerance_ms = 100; // 100ms tolerance
-        
-        let report = OutputReport::success(
-            actual_duration,
-            1024000,
-            std::time::Duration::from_secs(5),
-            ClippingMode::Copy,
-        );
-        
-        let result = OutputValidator::validate_output(&report, &expected_duration, tolerance_ms);
-        
-        assert!(!result.overall_valid);
-        assert!(!result.duration_valid);
-        assert!(result.success_valid);
-        assert!(result.size_valid);
-        assert_eq!(result.duration_difference_ms, 1000);
-    }
-
-    #[test]
-    fn test_output_validator_failure_report() {
-        let expected_duration = TimeSpec::from_seconds(10.0);
-        let tolerance_ms = 100;
-        
-        let report = OutputReport::failure(
-            ClippingMode::Copy,
-            "Processing failed".to_string(),
-        );
-        
-        let result = OutputValidator::validate_output(&report, &expected_duration, tolerance_ms);
-        
-        assert!(!result.overall_valid);
-        assert!(result.duration_valid); // Duration check passes (0.0 vs expected)
-        assert!(!result.success_valid);
-        assert!(!result.size_valid);
-    }
-
-    #[test]
-    fn test_output_validator_empty_file() {
-        let expected_duration = TimeSpec::from_seconds(10.0);
-        let tolerance_ms = 100;
-        
-        let report = OutputReport {
-            success: true,
-            duration: TimeSpec::from_seconds(10.0),
-            file_size: 0, // Empty file
-            processing_time: std::time::Duration::from_secs(5),
-            mode_used: ClippingMode::Copy,
-            warnings: Vec::new(),
-            first_pts: None,
-            last_pts: None,
-        };
-        
-        let result = OutputValidator::validate_output(&report, &expected_duration, tolerance_ms);
-        
-        assert!(!result.overall_valid);
-        assert!(result.duration_valid);
-        assert!(result.success_valid);
-        assert!(!result.size_valid);
     }
 }

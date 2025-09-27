@@ -198,11 +198,13 @@ impl LoggingSystem {
 }
 
 /// Multi-writer that writes to multiple destinations
+#[allow(dead_code)]
 struct MultiWriter {
     writers: Vec<Box<dyn Write + Send + Sync>>,
 }
 
 impl MultiWriter {
+    #[allow(dead_code)]
     fn new(writers: Vec<Box<dyn Write + Send + Sync>>) -> Self {
         Self { writers }
     }

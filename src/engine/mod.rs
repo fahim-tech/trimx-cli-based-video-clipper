@@ -14,7 +14,7 @@ pub use reencode::ReencodeClipper;
 pub use hybrid::HybridClipper;
 
 // Re-export progress types
-pub use progress::{ProgressCallback, ProgressTracker, ProgressInfo, ProgressPhase, ProgressMetrics, ConsoleProgressCallback, JsonProgressCallback, NoOpProgressCallback};
+pub use progress::{ProgressTracker};
 
 /// Clipping engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

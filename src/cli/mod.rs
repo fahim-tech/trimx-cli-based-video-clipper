@@ -62,6 +62,18 @@ pub struct ClipArgs {
     /// Clipping mode (auto, copy, reencode, hybrid)
     #[arg(short, long, default_value = "auto")]
     pub mode: String,
+
+    /// Quality setting (0-51)
+    #[arg(long)]
+    pub quality: Option<u8>,
+
+    /// Overwrite output file if it exists
+    #[arg(long)]
+    pub overwrite: bool,
+
+    /// Number of threads to use
+    #[arg(long)]
+    pub threads: Option<usize>,
 }
 
 /// Arguments for inspect command
@@ -78,6 +90,18 @@ pub struct InspectArgs {
     /// Include metadata
     #[arg(long, default_value = "true")]
     pub metadata: bool,
+
+    /// Output format (json, yaml, text)
+    #[arg(long, default_value = "text")]
+    pub format: String,
+
+    /// Show stream information
+    #[arg(long)]
+    pub show_streams: bool,
+
+    /// Show keyframe information
+    #[arg(long)]
+    pub show_keyframes: bool,
 }
 
 /// Arguments for verify command

@@ -3,7 +3,7 @@
 use anyhow::Result;
 use tracing::info;
 use crate::cli::{Cli, Commands};
-use crate::app::container::DefaultAppContainer;
+use crate::app::container::{AppContainer, DefaultAppContainer};
 
 /// Initialize configuration hierarchy following precedence: CLI > Env > File > Defaults
 pub async fn initialize_configuration_hierarchy(container: &DefaultAppContainer, cli: &Cli) -> Result<()> {

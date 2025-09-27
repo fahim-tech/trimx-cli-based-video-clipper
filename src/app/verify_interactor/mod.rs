@@ -102,7 +102,7 @@ impl VerifyInteractor {
         
         Ok(VerifyResponse {
             output_file: processed_request.output_file,
-            verification_result,
+            verification_result: verification_result.clone(),
             output_media_info,
             file_metadata,
             is_valid: verification_result.success,
@@ -291,9 +291,14 @@ impl VerifyRequest {
         expected_mode: ClippingMode,
     ) -> Self {
         Self {
+            output_path: output_file.clone(),
             output_file,
+            expected_start: String::new(),
+            expected_end: String::new(),
             expected_range,
+            mode: expected_mode.clone(),
             expected_mode,
+            tolerance: 100,
             tolerance_ms: 100, // Default 100ms tolerance
         }
     }
@@ -306,9 +311,14 @@ impl VerifyRequest {
         tolerance_ms: u32,
     ) -> Self {
         Self {
+            output_path: output_file.clone(),
             output_file,
+            expected_start: String::new(),
+            expected_end: String::new(),
             expected_range,
+            mode: expected_mode.clone(),
             expected_mode,
+            tolerance: tolerance_ms,
             tolerance_ms,
         }
     }

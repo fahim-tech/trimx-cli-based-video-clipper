@@ -43,7 +43,8 @@ use crate::domain::model::{CutRange, TimeSpec};
 use crate::app::container::{AppContainer, DefaultAppContainer};
 
 /// Main entry point for the TrimX CLI application
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -120,6 +121,42 @@ fn main() -> Result<()> {
                         error!("Validation error: {}", msg);
                         2
                     }
+                    DomainError::InvalidFormat(msg) => {
+                        error!("Invalid format: {}", msg);
+                        3
+                    }
+                    DomainError::UnsupportedCodec(msg) => {
+                        error!("Unsupported codec: {}", msg);
+                        4
+                    }
+                    DomainError::InvalidTimeRange(msg) => {
+                        error!("Invalid time range: {}", msg);
+                        2
+                    }
+                    DomainError::PermissionDenied(msg) => {
+                        error!("Permission denied: {}", msg);
+                        5
+                    }
+                    DomainError::ResourceUnavailable(msg) => {
+                        error!("Resource unavailable: {}", msg);
+                        6
+                    }
+                    DomainError::ValidationFailed(msg) => {
+                        error!("Validation failed: {}", msg);
+                        2
+                    }
+                    DomainError::FsFail(msg) => {
+                        error!("File system error: {}", msg);
+                        7
+                    }
+                    DomainError::NotImplemented => {
+                        error!("Feature not implemented yet");
+                        8
+                    }
+                    DomainError::OutOfRange(msg) => {
+                        error!("Out of range: {}", msg);
+                        2
+                    }
                 };
                 std::process::exit(exit_code);
             } else {
@@ -143,7 +180,7 @@ fn execute_clip_command(container: &DefaultAppContainer, args: crate::cli::ClipA
         start_time: args.start,
         end_time: args.end,
         cut_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001)).unwrap(),
-        mode: args.mode,
+        mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
         quality: args.quality,
         quality_settings: None,
         overwrite: args.overwrite,
@@ -152,8 +189,9 @@ fn execute_clip_command(container: &DefaultAppContainer, args: crate::cli::ClipA
     
     match tokio::runtime::Runtime::new() {
         Ok(rt) => rt.block_on(async {
-            interactor.clip_video(request).await
-                .map_err(|e| anyhow::anyhow!("Clip operation failed: {}", e))
+            let _result = interactor.clip_video(request).await
+                .map_err(|e| anyhow::anyhow!("Clip operation failed: {}", e))?;
+            Ok(())
         }),
         Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e))
     }
@@ -194,8 +232,8 @@ fn execute_verify_command(container: &DefaultAppContainer, args: crate::cli::Ver
         expected_start: args.start,
         expected_end: args.end,
         expected_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001)).unwrap(),
-        mode: args.mode.clone(),
-        expected_mode: args.mode,
+        mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
+        expected_mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
         tolerance: args.tolerance,
         tolerance_ms: args.tolerance,
     };

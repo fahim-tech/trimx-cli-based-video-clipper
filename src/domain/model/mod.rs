@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 /// Memory usage statistics
 #[derive(Debug, Clone)]
@@ -14,7 +15,7 @@ use std::ops::Add;
 use crate::domain::errors::DomainError;
 
 /// Time specification with precision - represents time in seconds with fractional precision
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct TimeSpec {
     pub seconds: f64,
 }
@@ -141,7 +142,7 @@ impl Add for TimeSpec {
 }
 
 /// Timebase for timestamp calculations - represents rational number for timestamp conversion
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Timebase {
     pub num: i32,
     pub den: i32,
@@ -201,7 +202,7 @@ impl Timebase {
 }
 
 /// Video stream information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoStreamInfo {
     pub index: usize,
     pub codec: String,
@@ -267,7 +268,7 @@ impl VideoStreamInfo {
 }
 
 /// Audio stream information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioStreamInfo {
     pub index: usize,
     pub codec: String,
@@ -330,7 +331,7 @@ impl AudioStreamInfo {
 }
 
 /// Subtitle stream information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubtitleStreamInfo {
     pub index: usize,
     pub codec: String,
@@ -362,7 +363,7 @@ impl SubtitleStreamInfo {
 }
 
 /// Complete media file information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaInfo {
     pub path: String,
     pub duration: TimeSpec,

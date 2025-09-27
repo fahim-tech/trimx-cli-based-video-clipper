@@ -2,7 +2,6 @@
 //!
 //! This module provides FFmpeg-based video processing capabilities.
 
-use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::domain::model::*;
@@ -21,20 +20,20 @@ impl FFmpegAdapter {
 
 #[async_trait]
 impl ExecutePort for FFmpegAdapter {
-    async fn execute_plan(&self, plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
+    async fn execute_plan(&self, _plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
         // TODO: Implement actual FFmpeg execution
         Err(DomainError::NotImplemented)
     }
     
-    async fn execute_copy_mode(&self, plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
+    async fn execute_copy_mode(&self, _plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
         Err(DomainError::NotImplemented)
     }
     
-    async fn execute_reencode_mode(&self, plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
+    async fn execute_reencode_mode(&self, _plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
         Err(DomainError::NotImplemented)
     }
     
-    async fn execute_hybrid_mode(&self, plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
+    async fn execute_hybrid_mode(&self, _plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
         Err(DomainError::NotImplemented)
     }
     

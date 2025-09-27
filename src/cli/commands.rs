@@ -1,11 +1,11 @@
 //! Command implementations
 
 use std::path::Path;
-use anyhow::{Result, Context};
-use tracing::{info, warn, error};
+use anyhow::Result;
+use tracing::info;
 
 use crate::cli::{ClipArgs, InspectArgs, VerifyArgs};
-use crate::domain::model::{TimeSpec, ClippingMode};
+use crate::domain::model::TimeSpec;
 
 /// Execute the clip command
 pub fn clip(args: ClipArgs) -> Result<()> {

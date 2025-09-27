@@ -4,6 +4,7 @@
 mod tests {
     use super::*;
     use crate::domain::errors::*;
+    use crate::domain::model::*;
 
     #[test]
     fn test_time_spec_from_seconds() {
@@ -93,8 +94,8 @@ mod tests {
     #[test]
     fn test_video_stream_info_invalid() {
         let timebase = Timebase::new(1, 30).unwrap();
-        assert!(VideoStreamInfo::new(0, "h264".to_string(), 0, 1080, 29.97, timebase).is_err());
-        assert!(VideoStreamInfo::new(0, "h264".to_string(), 1920, 0, 29.97, timebase).is_err());
+        assert!(VideoStreamInfo::new(0, "h264".to_string(), 0, 1080, 29.97, timebase.clone()).is_err());
+        assert!(VideoStreamInfo::new(0, "h264".to_string(), 1920, 0, 29.97, timebase.clone()).is_err());
         assert!(VideoStreamInfo::new(0, "h264".to_string(), 1920, 1080, 0.0, timebase).is_err());
     }
 
@@ -113,7 +114,7 @@ mod tests {
     #[test]
     fn test_audio_stream_info_invalid() {
         let timebase = Timebase::av_time_base();
-        assert!(AudioStreamInfo::new(0, "aac".to_string(), 0, 2, timebase).is_err());
+        assert!(AudioStreamInfo::new(0, "aac".to_string(), 0, 2, timebase.clone()).is_err());
         assert!(AudioStreamInfo::new(0, "aac".to_string(), 48000, 0, timebase).is_err());
     }
 
@@ -156,7 +157,7 @@ mod tests {
     fn test_cut_range_keyframe_alignment() {
         let start = TimeSpec::from_seconds(1.0);
         let end = TimeSpec::from_seconds(2.0);
-        let range = CutRange::new(start, end).unwrap();
+        let _range = CutRange::new(start, end).unwrap();
         
         let frame_duration = 1.0 / 30.0; // 30 fps
         let tolerance = frame_duration * 0.1;

@@ -230,49 +230,70 @@ impl ExecutePort for LibavExecutionAdapter {
     async fn execute_reencode_mode(&self, plan: &ExecutionPlan) -> Result<OutputReport, DomainError> {
         let start_time = Instant::now();
 
+        println!("Starting re-encoding mode for frame-accurate clipping...");
+
         // Open input file
         let mut ictx = ffmpeg_next::format::input(&plan.input_file)
             .map_err(|e| DomainError::ProcessingError(format!("Failed to open input: {}", e)))?;
+
+        // Find video stream for re-encoding
+        let video_stream_index = ictx.streams()
+            .enumerate()
+            .find(|(_, stream)| stream.parameters().medium() == ffmpeg_next::media::Type::Video)
+            .map(|(index, _)| index)
+            .ok_or_else(|| DomainError::ProcessingError("No video stream found for re-encoding".to_string()))?;
+
+        let video_stream = ictx.stream(video_stream_index)
+            .ok_or_else(|| DomainError::ProcessingError("Video stream not accessible".to_string()))?;
 
         // Create output context
         let mut octx = ffmpeg_next::format::output(&plan.output_file)
             .map_err(|e| DomainError::ProcessingError(format!("Failed to create output: {}", e)))?;
 
-        // Copy streams with proper codec setup for re-encoding
-        let mut stream_mapping = Vec::new();
-        for (index, stream) in ictx.streams().enumerate() {
-            let codec_id = stream.parameters().id();
+        // Setup video decoder
+        let mut video_decoder = ffmpeg_next::codec::context::Context::from_parameters(video_stream.parameters())
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to create decoder context: {}", e)))?
+            .decoder()
+            .video()
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to create video decoder: {}", e)))?;
 
-            // Find appropriate encoder based on stream type
-            let encoder_codec = match stream.parameters().medium() {
-                ffmpeg_next::media::Type::Video => {
-                    Self::find_best_video_codec(codec_id)
-                        .ok_or_else(|| DomainError::ProcessingError("No suitable video encoder found".to_string()))?
-                },
-                ffmpeg_next::media::Type::Audio => {
-                    Self::find_best_audio_codec(codec_id)
-                        .ok_or_else(|| DomainError::ProcessingError("No suitable audio encoder found".to_string()))?
-                },
-                ffmpeg_next::media::Type::Subtitle => {
-                    codec::encoder::find(codec_id)
-                        .or_else(|| codec::encoder::find(Id::MOV_TEXT))
-                        .ok_or_else(|| DomainError::ProcessingError("No subtitle encoder found".to_string()))?
-                },
-                _ => {
-                    return Err(DomainError::ProcessingError(
-                        format!("Unsupported stream type at index {}", index)
-                    ));
-                }
-            };
+        // Setup video encoder
+        let encoder_codec = Self::find_best_video_codec(video_stream.parameters().id())
+            .ok_or_else(|| DomainError::ProcessingError("No suitable video encoder found".to_string()))?;
 
-            let mut out_stream = octx.add_stream(encoder_codec)
-                .map_err(|e| DomainError::ProcessingError(format!("Failed to add stream: {}", e)))?;
+        let out_stream = octx.add_stream(encoder_codec)
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to add video stream: {}", e)))?;
 
-            // Configure output stream parameters
-            out_stream.set_parameters(stream.parameters());
-            out_stream.set_time_base(stream.time_base());
+        // Configure video encoder
+        let mut video_encoder = ffmpeg_next::codec::context::Context::new()
+            .encoder()
+            .video()
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to create video encoder: {}", e)))?;
 
-            stream_mapping.push((index, out_stream.index()));
+        // Set encoder parameters
+        video_encoder.set_width(video_decoder.width());
+        video_encoder.set_height(video_decoder.height());
+        video_encoder.set_aspect_ratio(video_decoder.aspect_ratio());
+        video_encoder.set_time_base(out_stream.time_base());
+        video_encoder.set_format(ffmpeg_next::format::Pixel::YUV420P);
+
+        // Set quality parameters (CRF 23 for good quality/size balance)
+        video_encoder.set_max_bit_rate(0); // Use CRF instead of bitrate
+
+        // Open encoder
+        let mut video_encoder = video_encoder.open_as(encoder_codec)
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to open video encoder: {}", e)))?;
+
+        // Setup audio pass-through (copy audio streams without re-encoding)
+        for (_index, stream) in ictx.streams().enumerate() {
+            if stream.parameters().medium() == ffmpeg_next::media::Type::Audio {
+                let mut audio_out_stream = octx.add_stream(ffmpeg_next::codec::encoder::find(stream.parameters().id()))
+                    .map_err(|e| DomainError::ProcessingError(format!("Failed to add audio stream: {}", e)))?;
+
+                // Copy parameters directly for pass-through
+                audio_out_stream.set_parameters(stream.parameters());
+                audio_out_stream.set_time_base(stream.time_base());
+            }
         }
 
         // Write header
@@ -283,25 +304,29 @@ impl ExecutePort for LibavExecutionAdapter {
         let start_ts = (plan.cut_range.start.to_seconds() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
         let end_ts = (plan.cut_range.end.to_seconds() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
 
+        println!("Seeking to start time: {:.3}s", plan.cut_range.start.to_seconds());
+
         // Seek to start position
         ictx.seek(start_ts, start_ts..end_ts)
             .map_err(|e| DomainError::ProcessingError(format!("Failed to seek: {}", e)))?;
 
-        let mut packet_count = 0;
+        let mut frames_processed = 0;
         let mut total_size: u64 = 0;
         let mut first_pts = None;
         let mut last_pts = None;
 
-        // Pre-collect stream time bases to avoid borrow conflicts
-        let stream_time_bases: Vec<_> = ictx.streams().map(|stream| stream.time_base()).collect();
+        println!("Starting decode/encode pipeline...");
 
-        // Process packets with re-encoding
+        // Store stream information to avoid borrowing conflicts
+        let stream_timebases: Vec<_> = ictx.streams().map(|s| s.time_base()).collect();
+        let stream_types: Vec<_> = ictx.streams().map(|s| s.parameters().medium()).collect();
+
+        // Process packets with actual decode/encode pipeline
         for (stream_index, packet) in ictx.packets() {
             let pts = packet.pts().unwrap_or(0);
-            let dts = packet.dts().unwrap_or(0);
 
             // Convert to AV_TIME_BASE for comparison
-            let stream_tb = stream_time_bases[stream_index.index()];
+            let stream_tb = stream_timebases[stream_index.index()];
             let pts_av_timebase = (pts as f64 * stream_tb.numerator() as f64 / stream_tb.denominator() as f64 * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
 
             // Check if packet is within range
@@ -311,31 +336,72 @@ impl ExecutePort for LibavExecutionAdapter {
                 }
                 last_pts = Some(pts_av_timebase);
 
-                // Create new packet with adjusted timestamps
-                let mut out_packet = packet.clone();
-                let adjusted_pts = ((pts_av_timebase - start_ts) as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64 * stream_tb.denominator() as f64 / stream_tb.numerator() as f64) as i64;
-                let adjusted_dts = if dts != ffmpeg_next::ffi::AV_NOPTS_VALUE {
-                    ((dts as f64 * stream_tb.numerator() as f64 / stream_tb.denominator() as f64 * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64 - start_ts) as i64
-                } else {
-                    adjusted_pts
-                };
+                // Handle video packets (decode + encode)
+                if stream_index.index() == video_stream_index {
+                    // Send packet to decoder
+                    video_decoder.send_packet(&packet)
+                        .map_err(|e| DomainError::ProcessingError(format!("Failed to send packet to decoder: {}", e)))?;
 
-                out_packet.set_pts(Some(adjusted_pts));
-                out_packet.set_dts(Some(adjusted_dts));
+                    // Receive decoded frames
+                    let mut frame = ffmpeg_next::util::frame::video::Video::empty();
+                    while video_decoder.receive_frame(&mut frame).is_ok() {
+                        // Send frame to encoder
+                        video_encoder.send_frame(&frame)
+                            .map_err(|e| DomainError::ProcessingError(format!("Failed to send frame to encoder: {}", e)))?;
 
-                // Write packet to output (this will trigger re-encoding)
-                out_packet.write_interleaved(&mut octx)
-                    .map_err(|e| DomainError::ProcessingError(format!("Failed to write packet: {}", e)))?;
+                        // Receive encoded packets
+                        let mut encoded_packet = ffmpeg_next::codec::packet::Packet::empty();
+                        while video_encoder.receive_packet(&mut encoded_packet).is_ok() {
+                            // Adjust timestamps for output
+                            let adjusted_pts = ((pts_av_timebase - start_ts) as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64 * stream_tb.denominator() as f64 / stream_tb.numerator() as f64) as i64;
+                            encoded_packet.set_pts(Some(adjusted_pts));
+                            encoded_packet.set_dts(Some(adjusted_pts));
 
-                total_size += packet.size() as u64;
+                            // Write to output
+                            encoded_packet.write_interleaved(&mut octx)
+                                .map_err(|e| DomainError::ProcessingError(format!("Failed to write encoded packet: {}", e)))?;
+
+                            total_size += encoded_packet.size() as u64;
+                            frames_processed += 1;
+                        }
+                    }
+                }
+                // Handle audio packets (pass-through)
+                else if stream_types[stream_index.index()] == ffmpeg_next::media::Type::Audio {
+                    let mut audio_packet = packet.clone();
+                    let adjusted_pts = ((pts_av_timebase - start_ts) as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64 * stream_tb.denominator() as f64 / stream_tb.numerator() as f64) as i64;
+                    audio_packet.set_pts(Some(adjusted_pts));
+                    audio_packet.set_dts(Some(adjusted_pts));
+
+                    audio_packet.write_interleaved(&mut octx)
+                        .map_err(|e| DomainError::ProcessingError(format!("Failed to write audio packet: {}", e)))?;
+
+                    total_size += audio_packet.size() as u64;
+                }
+
+                // Show progress every 100 frames
+                if frames_processed % 100 == 0 && frames_processed > 0 {
+                    print!(".");
+                    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                }
             }
 
-            packet_count += 1;
-
-            // Prevent infinite loops
-            if packet_count > 100000 {
+            // Break if we've passed the end time
+            if pts_av_timebase > end_ts {
                 break;
             }
+        }
+
+        // Flush encoder
+        println!("\nFlushing encoder...");
+        video_encoder.send_eof()
+            .map_err(|e| DomainError::ProcessingError(format!("Failed to flush video encoder: {}", e)))?;
+
+        let mut encoded_packet = ffmpeg_next::codec::packet::Packet::empty();
+        while video_encoder.receive_packet(&mut encoded_packet).is_ok() {
+            encoded_packet.write_interleaved(&mut octx)
+                .map_err(|e| DomainError::ProcessingError(format!("Failed to write final packet: {}", e)))?;
+            total_size += encoded_packet.size() as u64;
         }
 
         // Write trailer
@@ -347,13 +413,16 @@ impl ExecutePort for LibavExecutionAdapter {
             .map_err(|e| DomainError::ProcessingError(format!("Failed to get output file size: {}", e)))?
             .len();
 
+        println!("\nRe-encoding completed: {} frames processed, {:.2} MB written", 
+                frames_processed, total_size as f64 / 1024.0 / 1024.0);
+
         Ok(OutputReport {
             success: true,
             duration: plan.cut_range.end - plan.cut_range.start,
             file_size,
             processing_time,
             mode_used: ClippingMode::Reencode,
-            warnings: vec![],
+            warnings: vec![format!("Re-encoded {} frames for frame-accurate clipping", frames_processed)],
             first_pts,
             last_pts,
         })
@@ -555,7 +624,7 @@ impl LibavExecutionAdapter {
         // 1. Both cut points are reasonably close to keyframes (within 1 frame at 30fps)
         // 2. GOP structure is regular enough
         // 3. Video codec supports copy mode
-        let frame_tolerance = 1.0 / 30.0; // 1 frame at 30fps
+        let _frame_tolerance = 1.0 / 30.0; // 1 frame at 30fps
         let keyframe_aligned = cut_start_keyframe_aligned && cut_end_keyframe_aligned;
         let regular_structure = gop_analysis.regularity_score > 0.7;
 
@@ -565,7 +634,7 @@ impl LibavExecutionAdapter {
     /// Analyze video structure for keyframe and GOP information
     async fn analyze_video_structure(&self, input_path: &str) -> Result<GOPAnalysis, DomainError> {
         // Find video stream index
-        let mut input_ctx = ffmpeg_next::format::input(input_path)
+        let input_ctx = ffmpeg_next::format::input(input_path)
             .map_err(|e| DomainError::ProcessingError(format!("Failed to open input: {}", e)))?;
 
         let video_stream_index = input_ctx.streams()

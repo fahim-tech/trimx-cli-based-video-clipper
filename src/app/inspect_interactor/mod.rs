@@ -90,7 +90,7 @@ impl InspectInteractor {
         let mut output = String::new();
         
         output.push_str(&format!("Media File Information:\n"));
-        output.push_str(&format!("  File: {}\n", request.input_path.as_ref().unwrap_or(&request.input)));
+        output.push_str(&format!("  File: {}\n", if !request.input_path.is_empty() { &request.input_path } else { &request.input }));
         output.push_str(&format!("  Container: {}\n", media_info.container));
         output.push_str(&format!("  Duration: {:.3}s\n", media_info.duration.seconds));
         output.push_str(&format!("  File Size: {:.2} MB\n", media_info.file_size as f64 / 1_048_576.0));

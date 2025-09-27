@@ -3,8 +3,10 @@
 use std::time::Instant;
 use std::sync::Arc;
 use tracing::{info, warn, debug};
-use crate::engine::{EngineConfig, ClippingProgress, ClippingPhase, StreamCopyClipper, ReencodeClipper, ProgressTracker, ProgressPhase};
+use crate::engine::{EngineConfig, ClippingProgress, ClippingPhase, StreamCopyClipper, ReencodeClipper, ProgressTracker};
+use crate::engine::progress::ProgressPhase;
 use crate::planner::{CutPlan, ClippingStrategy};
+use crate::planner::keyframe_analyzer::{KeyframeAnalyzer, GOPAnalysis};
 use crate::error::{TrimXError, TrimXResult};
 
 /// Hybrid clipper that uses GOP-spanning method:
@@ -19,6 +21,8 @@ pub struct HybridClipper {
     reencode_engine: ReencodeClipper,
     /// Minimum segment duration to justify hybrid approach (seconds)
     min_copy_duration: f64,
+    /// Keyframe analyzer for GOP detection
+    keyframe_analyzer: KeyframeAnalyzer,
 }
 
 impl HybridClipper {
@@ -29,6 +33,7 @@ impl HybridClipper {
             copy_engine: StreamCopyClipper::new(),
             reencode_engine: ReencodeClipper::new(),
             min_copy_duration: 2.0, // Minimum 2 seconds for stream copy to be worthwhile
+            keyframe_analyzer: KeyframeAnalyzer::new(),
         }
     }
 
@@ -37,6 +42,7 @@ impl HybridClipper {
         self.debug = true;
         self.copy_engine = self.copy_engine.with_debug();
         self.reencode_engine = self.reencode_engine.with_debug();
+        self.keyframe_analyzer = self.keyframe_analyzer.with_debug();
         self
     }
 
@@ -139,7 +145,7 @@ impl HybridClipper {
     }
 
     /// Plan the optimal hybrid strategy based on keyframe analysis
-    fn plan_hybrid_strategy(&self, config: &EngineConfig, plan: &CutPlan) -> TrimXResult<HybridStrategy> {
+    fn plan_hybrid_strategy(&self, config: &EngineConfig, _plan: &CutPlan) -> TrimXResult<HybridStrategy> {
         let duration = config.end_time - config.start_time;
         
         // If very short clip, just use re-encoding
@@ -148,12 +154,12 @@ impl HybridClipper {
             return Ok(HybridStrategy::FullReencode);
         }
 
-        // Analyze keyframe alignment
-        let keyframe_info = &plan.keyframe_info;
+        // Perform comprehensive GOP analysis
+        let gop_analysis = self.perform_gop_analysis(&config.input_path)?;
         
         // Check if cuts align well with keyframes
-        let start_aligned = self.is_time_near_keyframe(config.start_time, keyframe_info)?;
-        let end_aligned = self.is_time_near_keyframe(config.end_time, keyframe_info)?;
+        let start_aligned = self.keyframe_analyzer.is_keyframe_aligned(&gop_analysis, config.start_time);
+        let end_aligned = self.keyframe_analyzer.is_keyframe_aligned(&gop_analysis, config.end_time);
 
         if start_aligned && end_aligned {
             debug!("Both cuts align with keyframes, using full stream copy");
@@ -165,8 +171,8 @@ impl HybridClipper {
             return Ok(HybridStrategy::FullReencode);
         }
 
-        // Plan three-way hybrid approach
-        let segments = self.plan_three_way_segments(config, keyframe_info)?;
+        // Plan three-way hybrid approach using actual GOP boundaries
+        let segments = self.plan_three_way_segments_with_gop_analysis(config, &gop_analysis)?;
         
         // Validate that middle segment is worth stream copying
         let middle_duration = segments.middle_end - segments.middle_start;
@@ -183,51 +189,94 @@ impl HybridClipper {
         Ok(HybridStrategy::ThreeWay(segments))
     }
 
-    /// Check if a time point is near a keyframe
-    fn is_time_near_keyframe(&self, time: f64, keyframe_info: &crate::planner::KeyframeInfo) -> TrimXResult<bool> {
-        // For now, use a simple heuristic based on GOP size
-        // In a full implementation, we'd check actual keyframe positions
+    /// Perform comprehensive GOP analysis on the input file
+    fn perform_gop_analysis(&self, input_path: &str) -> TrimXResult<GOPAnalysis> {
+        info!("Performing GOP analysis for hybrid clipping: {}", input_path);
         
-        let gop_size = keyframe_info.gop_size.unwrap_or(2.0); // Default 2 second GOP
-        let tolerance = gop_size * 0.1; // 10% of GOP size
-        
-        // Check if time is close to any multiple of GOP size
-        let gop_position = time % gop_size;
-        let aligned = gop_position < tolerance || gop_position > (gop_size - tolerance);
-        
+        // Find video stream index
+        let input_ctx = ffmpeg_next::format::input(input_path)
+            .map_err(|e| TrimXError::ClippingError {
+                message: format!("Failed to open input file: {}", e)
+            })?;
+
+        let video_stream_index = input_ctx.streams()
+            .enumerate()
+            .find(|(_, stream)| stream.parameters().medium() == ffmpeg_next::media::Type::Video)
+            .map(|(index, _)| index)
+            .ok_or_else(|| TrimXError::ClippingError {
+                message: "No video stream found".to_string()
+            })?;
+
+        // Perform comprehensive GOP analysis
+        let gop_analysis = self.keyframe_analyzer.analyze_gop_structure(input_path, video_stream_index)
+            .map_err(|e| TrimXError::ClippingError {
+                message: format!("GOP analysis failed: {}", e)
+            })?;
+
         if self.debug {
-            debug!("Time {:.3}s, GOP size {:.2}s, position {:.3}s, aligned: {}", 
-                   time, gop_size, gop_position, aligned);
+            info!("GOP Analysis Results:");
+            info!("  Total keyframes: {}", gop_analysis.keyframe_count);
+            info!("  Average GOP duration: {:.3}s", gop_analysis.avg_gop_duration);
+            info!("  Regularity score: {:.2}", gop_analysis.regularity_score);
+            if let Some(ref pattern) = gop_analysis.gop_pattern {
+                info!("  Detected pattern: {}", pattern);
+            }
         }
-        
-        Ok(aligned)
+
+        Ok(gop_analysis)
     }
 
-    /// Plan three-way segmentation for hybrid approach
-    fn plan_three_way_segments(&self, config: &EngineConfig, keyframe_info: &crate::planner::KeyframeInfo) -> TrimXResult<ThreeWaySegments> {
-        let gop_size = keyframe_info.gop_size.unwrap_or(2.0);
+    /// Plan three-way segmentation using comprehensive GOP analysis
+    fn plan_three_way_segments_with_gop_analysis(&self, config: &EngineConfig, gop_analysis: &GOPAnalysis) -> TrimXResult<ThreeWaySegments> {
+        // Find optimal cut points using actual keyframe positions
+        let (_optimal_start, _optimal_end) = self.keyframe_analyzer.find_optimal_cut_points(
+            gop_analysis, config.start_time, config.end_time
+        );
+
+        // Find the first keyframe after the start time
+        let middle_start = gop_analysis.keyframes.iter()
+            .find(|kf| kf.timestamp > config.start_time)
+            .map(|kf| kf.timestamp)
+            .unwrap_or_else(|| {
+                // Fallback: estimate next keyframe based on GOP size
+                let gop_size = gop_analysis.avg_gop_duration;
+                let gops_from_start = (config.start_time / gop_size).ceil();
+                gops_from_start * gop_size
+            });
+
+        // Find the last keyframe before the end time
+        let middle_end = gop_analysis.keyframes.iter()
+            .rev()
+            .find(|kf| kf.timestamp < config.end_time)
+            .map(|kf| kf.timestamp)
+            .unwrap_or_else(|| {
+                // Fallback: estimate previous keyframe based on GOP size
+                let gop_size = gop_analysis.avg_gop_duration;
+                let gops_from_start = (config.end_time / gop_size).floor();
+                gops_from_start * gop_size
+            });
+
+        // Ensure segments make sense and provide reasonable leading/trailing segments
+        let min_leading_duration = 0.1; // Minimum 0.1s leading segment
+        let min_trailing_duration = 0.1; // Minimum 0.1s trailing segment
         
-        // Find first keyframe after start time
-        let middle_start = if let Some(next_kf) = keyframe_info.next_keyframe {
-            next_kf
-        } else {
-            // Estimate next keyframe position
-            let gops_from_start = (config.start_time / gop_size).ceil();
-            gops_from_start * gop_size
-        };
+        let middle_start = middle_start.max(config.start_time + min_leading_duration);
+        let middle_end = middle_end.min(config.end_time - min_trailing_duration);
 
-        // Find last keyframe before end time
-        let middle_end = if let Some(end_kf) = keyframe_info.end_keyframe {
-            end_kf
-        } else {
-            // Estimate previous keyframe position
-            let gops_from_start = (config.end_time / gop_size).floor();
-            gops_from_start * gop_size
-        };
+        // Validate that we have a reasonable middle segment
+        if middle_start >= middle_end {
+            return Err(TrimXError::ClippingError {
+                message: "No suitable GOP boundaries found for hybrid approach".to_string()
+            });
+        }
 
-        // Ensure segments make sense
-        let middle_start = middle_start.max(config.start_time + 0.1); // At least 0.1s leading
-        let middle_end = middle_end.min(config.end_time - 0.1); // At least 0.1s trailing
+        if self.debug {
+            debug!("Three-way segmentation:");
+            debug!("  Original range: {:.3}s - {:.3}s", config.start_time, config.end_time);
+            debug!("  Leading segment: {:.3}s - {:.3}s", config.start_time, middle_start);
+            debug!("  Middle segment: {:.3}s - {:.3}s", middle_start, middle_end);
+            debug!("  Trailing segment: {:.3}s - {:.3}s", middle_end, config.end_time);
+        }
 
         Ok(ThreeWaySegments {
             middle_start,
@@ -235,79 +284,115 @@ impl HybridClipper {
         })
     }
 
-    /// Execute three-way hybrid clipping
+    /// Execute three-way hybrid clipping with improved error handling and progress tracking
     fn execute_three_way_hybrid(&self, config: EngineConfig, segments: ThreeWaySegments) -> TrimXResult<ClippingProgress> {
         let temp_dir = std::env::temp_dir().join("trimx_hybrid");
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| TrimXError::IoError(e))?;
 
-        // Generate temporary file names
+        // Generate temporary file names with unique identifiers
         let leading_file = temp_dir.join("leading.mp4");
         let middle_file = temp_dir.join("middle.mp4");
         let trailing_file = temp_dir.join("trailing.mp4");
 
         let mut total_progress = 0.0;
+        let mut segment_files = Vec::new();
 
         // Step 1: Re-encode leading segment (start to first keyframe)
-        info!("Step 1/4: Re-encoding leading segment ({:.3}s to {:.3}s)", 
-              config.start_time, segments.middle_start);
-        
-        let leading_config = EngineConfig {
-            start_time: config.start_time,
-            end_time: segments.middle_start,
-            output_path: leading_file.to_string_lossy().to_string(),
-            ..config.clone()
-        };
-        
-        self.reencode_engine.clip(leading_config)?;
-        total_progress += 25.0;
+        let leading_duration = segments.middle_start - config.start_time;
+        if leading_duration > 0.01 { // Only process if segment is meaningful
+            info!("Step 1/4: Re-encoding leading segment ({:.3}s to {:.3}s, duration: {:.3}s)", 
+                  config.start_time, segments.middle_start, leading_duration);
+            
+            let leading_config = EngineConfig {
+                start_time: config.start_time,
+                end_time: segments.middle_start,
+                output_path: leading_file.to_string_lossy().to_string(),
+                ..config.clone()
+            };
+            
+            self.reencode_engine.clip(leading_config)
+                .map_err(|e| TrimXError::ClippingError {
+                    message: format!("Failed to re-encode leading segment: {}", e)
+                })?;
+            
+            segment_files.push(leading_file.to_string_lossy().to_string());
+            let _ = total_progress + 25.0;
+            info!("Leading segment completed successfully");
+        }
 
         // Step 2: Stream copy middle segment (keyframe to keyframe)
-        info!("Step 2/4: Stream copying middle segment ({:.3}s to {:.3}s)", 
-              segments.middle_start, segments.middle_end);
-        
-        let middle_config = EngineConfig {
-            start_time: segments.middle_start,
-            end_time: segments.middle_end,
-            output_path: middle_file.to_string_lossy().to_string(),
-            ..config.clone()
-        };
-        
-        self.copy_engine.clip(middle_config)?;
-        total_progress += 25.0;
+        let middle_duration = segments.middle_end - segments.middle_start;
+        if middle_duration > 0.01 { // Only process if segment is meaningful
+            info!("Step 2/4: Stream copying middle segment ({:.3}s to {:.3}s, duration: {:.3}s)", 
+                  segments.middle_start, segments.middle_end, middle_duration);
+            
+            let middle_config = EngineConfig {
+                start_time: segments.middle_start,
+                end_time: segments.middle_end,
+                output_path: middle_file.to_string_lossy().to_string(),
+                ..config.clone()
+            };
+            
+            self.copy_engine.clip(middle_config)
+                .map_err(|e| TrimXError::ClippingError {
+                    message: format!("Failed to stream copy middle segment: {}", e)
+                })?;
+            
+            segment_files.push(middle_file.to_string_lossy().to_string());
+            let _ = total_progress + 25.0;
+            info!("Middle segment completed successfully");
+        }
 
         // Step 3: Re-encode trailing segment (last keyframe to end)
-        info!("Step 3/4: Re-encoding trailing segment ({:.3}s to {:.3}s)", 
-              segments.middle_end, config.end_time);
-        
-        let trailing_config = EngineConfig {
-            start_time: segments.middle_end,
-            end_time: config.end_time,
-            output_path: trailing_file.to_string_lossy().to_string(),
-            ..config.clone()
-        };
-        
-        self.reencode_engine.clip(trailing_config)?;
+        let trailing_duration = config.end_time - segments.middle_end;
+        if trailing_duration > 0.01 { // Only process if segment is meaningful
+            info!("Step 3/4: Re-encoding trailing segment ({:.3}s to {:.3}s, duration: {:.3}s)", 
+                  segments.middle_end, config.end_time, trailing_duration);
+            
+            let trailing_config = EngineConfig {
+                start_time: segments.middle_end,
+                end_time: config.end_time,
+                output_path: trailing_file.to_string_lossy().to_string(),
+                ..config.clone()
+            };
+            
+            self.reencode_engine.clip(trailing_config)
+                .map_err(|e| TrimXError::ClippingError {
+                    message: format!("Failed to re-encode trailing segment: {}", e)
+                })?;
+            
+            segment_files.push(trailing_file.to_string_lossy().to_string());
+            let _ = total_progress + 25.0;
+            info!("Trailing segment completed successfully");
+        }
 
         // Step 4: Concatenate segments
-        info!("Step 4/4: Concatenating segments");
-        self.concatenate_segments(
-            &[
-                leading_file.to_string_lossy().to_string(),
-                middle_file.to_string_lossy().to_string(),
-                trailing_file.to_string_lossy().to_string(),
-            ],
-            &config.output_path,
-        )?;
+        info!("Step 4/4: Concatenating {} segments", segment_files.len());
+        
+        if segment_files.is_empty() {
+            return Err(TrimXError::ClippingError {
+                message: "No segments to concatenate".to_string()
+            });
+        }
+
+        self.concatenate_segments(&segment_files, &config.output_path)
+            .map_err(|e| TrimXError::ClippingError {
+                message: format!("Failed to concatenate segments: {}", e)
+            })?;
+        
         total_progress = 100.0;
 
         // Cleanup temporary files
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
+            warn!("Failed to cleanup temporary directory {:?}: {}", temp_dir, e);
+        }
 
+        info!("Hybrid clipping completed successfully with {} segments", segment_files.len());
         Ok(ClippingProgress {
             phase: ClippingPhase::Completed,
             progress: total_progress,
-            description: "Hybrid clipping completed successfully".to_string(),
+            description: format!("Hybrid clipping completed with {} segments", segment_files.len()),
             eta: None,
         })
     }

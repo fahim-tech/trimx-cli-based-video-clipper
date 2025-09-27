@@ -48,6 +48,18 @@ pub struct ClipArgs {
     /// Encoding preset
     #[arg(long, default_value = "medium")]
     pub preset: String,
+
+    /// Quality setting (0-51)
+    #[arg(long)]
+    pub quality: Option<u8>,
+
+    /// Overwrite output file if it exists
+    #[arg(long)]
+    pub overwrite: bool,
+
+    /// Number of threads to use
+    #[arg(long)]
+    pub threads: Option<usize>,
 }
 
 /// Arguments for the inspect command
@@ -60,6 +72,18 @@ pub struct InspectArgs {
     /// Output in JSON format
     #[arg(long)]
     pub json: bool,
+
+    /// Output format (json, yaml, text)
+    #[arg(long, default_value = "text")]
+    pub format: String,
+
+    /// Show stream information
+    #[arg(long)]
+    pub show_streams: bool,
+
+    /// Show keyframe information
+    #[arg(long)]
+    pub show_keyframes: bool,
 }
 
 /// Arguments for the verify command
@@ -76,6 +100,18 @@ pub struct VerifyArgs {
     /// Expected end time
     #[arg(short, long)]
     pub end: String,
+
+    /// Output file path
+    #[arg(short, long)]
+    pub output: String,
+
+    /// Clipping mode used
+    #[arg(long, default_value = "auto")]
+    pub mode: String,
+
+    /// Tolerance in milliseconds
+    #[arg(long, default_value = "100")]
+    pub tolerance: u32,
 }
 
 /// Validate input file path for security

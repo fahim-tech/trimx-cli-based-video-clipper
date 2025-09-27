@@ -15,6 +15,3 @@ pub use exec_libav::LibavExecutionAdapter;
 pub use fs_windows::FsWindowsAdapter;
 pub use tracing_log::TracingLogAdapter;
 pub use toml_config::TomlConfigAdapter;
-pub use env_windows::EnvWindowsAdapter;
-pub use probe_ffprobe::FFprobeAdapter;
-pub use exec_ffmpeg::FFmpegAdapter;
