@@ -150,30 +150,30 @@ fn execute_clip_command(args: ClipArgs) -> Result<()> {
             log_adapter,
         );
         
-        println!("🎬 Starting video clipping...");
-        println!("📁 Input: {}", request.input_file);
-        println!("⏱️  Range: {} to {}", request.cut_range.start, request.cut_range.end);
-        println!("🔧 Mode: {:?}", request.mode);
+        println!("Starting video clipping...");
+        println!("Input: {}", request.input_file);
+        println!("Range: {} to {}", request.cut_range.start, request.cut_range.end);
+        println!("Mode: {:?}", request.mode);
         
         let result = interactor.execute(request).await?;
         
         if result.success {
-            println!("\n✅ Video clipping completed successfully!");
-            println!("📄 Output file: {}", result.output_file);
-            println!("⏱️  Duration: {}", result.duration);
-            println!("🔧 Mode used: {:?}", result.mode_used);
-            println!("⏰ Processing time: {:.2}s", result.processing_time.as_secs_f64());
+            println!("\nVideo clipping completed successfully!");
+            println!("Output file: {}", result.output_file);
+            println!("Duration: {}", result.duration);
+            println!("Mode used: {:?}", result.mode_used);
+            println!("Processing time: {:.2}s", result.processing_time.as_secs_f64());
             
             // Show any warnings
             for warning in &result.warnings {
-                println!("⚠️  Warning: {}", warning);
+                println!("Warning: {}", warning);
             }
             
-            println!("\n🎉 Ready to use: {}", result.output_file);
+            println!("\nReady to use: {}", result.output_file);
         } else {
-            println!("\n❌ Video clipping failed!");
+            println!("\nVideo clipping failed!");
             for warning in &result.warnings {
-                println!("💥 Error: {}", warning);
+                println!("Error: {}", warning);
             }
             return Err(anyhow::anyhow!("Clip operation failed"));
         }
@@ -206,32 +206,32 @@ fn execute_inspect_command(args: InspectArgs) -> Result<()> {
             log_adapter,
         );
         
-        println!("🔍 Analyzing video file...");
+        println!("Analyzing video file...");
         
         let input_file = request.input_file.clone();
         let result = interactor.execute(request).await?;
         
         if result.success {
-            println!("\n✅ Video analysis completed successfully!");
-            println!("📄 File: {}", input_file);
-            println!("📦 Format: {}", result.media_info.container);
-            println!("⏱️  Duration: {}", result.media_info.duration);
-            println!("📊 File size: {} bytes", result.media_info.file_size);
-            println!("🎬 Streams: {} total", result.media_info.total_streams());
+            println!("\nVideo analysis completed successfully!");
+            println!("File: {}", input_file);
+            println!("Format: {}", result.media_info.container);
+            println!("Duration: {}", result.media_info.duration);
+            println!("File size: {} bytes", result.media_info.file_size);
+            println!("Streams: {} total", result.media_info.total_streams());
             
             for (i, video_stream) in result.media_info.video_streams.iter().enumerate() {
-                println!("🎥 Video stream {}: {}x{} @ {:.2} fps", 
+                println!("Video stream {}: {}x{} @ {:.2} fps", 
                     i, video_stream.width, video_stream.height, video_stream.frame_rate);
             }
             
             for (i, audio_stream) in result.media_info.audio_streams.iter().enumerate() {
-                println!("🔊 Audio stream {}: {} Hz, {} channels", 
+                println!("Audio stream {}: {} Hz, {} channels", 
                     i, audio_stream.sample_rate, audio_stream.channels);
             }
         } else {
-            println!("\n❌ Video analysis failed!");
+            println!("\nVideo analysis failed!");
             if let Some(error_msg) = &result.error_message {
-                println!("💥 Error: {}", error_msg);
+                println!("Error: {}", error_msg);
             }
         }
         
