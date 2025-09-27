@@ -7,6 +7,7 @@ pub struct TimeParser;
 
 impl TimeParser {
     /// Create a new time parser
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }

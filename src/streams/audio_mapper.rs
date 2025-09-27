@@ -118,6 +118,7 @@ impl Default for AudioMappingConfig {
 
 impl AudioMapper {
     /// Create a new audio mapper
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self { debug: false }
     }

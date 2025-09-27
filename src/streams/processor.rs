@@ -6,6 +6,7 @@ pub struct StreamProcessor;
 
 impl StreamProcessor {
     /// Create a new stream processor
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }

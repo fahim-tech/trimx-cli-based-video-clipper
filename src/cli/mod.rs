@@ -4,7 +4,7 @@
 
 pub mod commands;
 
-use clap::{Parser, Subcommand, Args};
+use clap::{Args, Parser, Subcommand};
 
 /// TrimX CLI Video Clipper
 ///
@@ -46,19 +46,19 @@ pub struct ClipArgs {
     /// Input video file
     #[arg(value_name = "FILE")]
     pub input: String,
-    
+
     /// Start time (HH:MM:SS or seconds)
     #[arg(short, long)]
     pub start: String,
-    
+
     /// End time (HH:MM:SS or seconds)
     #[arg(short, long)]
     pub end: String,
-    
+
     /// Output video file (optional - auto-generated if not provided)
     #[arg(short, long)]
     pub output: Option<String>,
-    
+
     /// Clipping mode (auto, copy, reencode, hybrid)
     #[arg(short, long, default_value = "auto")]
     pub mode: String,
@@ -82,11 +82,11 @@ pub struct InspectArgs {
     /// Input video file
     #[arg(value_name = "FILE")]
     pub input: String,
-    
+
     /// Include detailed stream information
     #[arg(long, default_value = "true")]
     pub streams: bool,
-    
+
     /// Include metadata
     #[arg(long, default_value = "true")]
     pub metadata: bool,
@@ -110,19 +110,19 @@ pub struct VerifyArgs {
     /// Output video file to verify
     #[arg(short, long)]
     pub output: String,
-    
+
     /// Expected start time
     #[arg(short, long)]
     pub start: String,
-    
+
     /// Expected end time
     #[arg(short, long)]
     pub end: String,
-    
+
     /// Expected mode
     #[arg(short, long)]
     pub mode: String,
-    
+
     /// Tolerance in milliseconds
     #[arg(short, long, default_value = "100")]
     pub tolerance: u32,

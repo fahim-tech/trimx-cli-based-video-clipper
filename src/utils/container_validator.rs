@@ -74,6 +74,7 @@ pub struct ValidationResult {
 
 impl ContainerValidator {
     /// Create a new container validator
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut validator = Self {
             debug: false,

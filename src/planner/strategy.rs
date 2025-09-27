@@ -13,6 +13,7 @@ pub struct StrategyPlanner {
 
 impl StrategyPlanner {
     /// Create a new strategy planner
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             keyframe_analyzer: KeyframeAnalyzer::new(),

@@ -1,7 +1,7 @@
 // Domain rules - Business logic and policies
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
+use crate::domain::model::*;
 
 /// Business rules for clipping mode selection
 pub struct ClippingModeSelector;
@@ -18,7 +18,7 @@ impl ClippingModeSelector {
             mode => Ok(mode), // Use requested mode if not auto
         }
     }
-    
+
     /// Automatically select the best clipping mode
     fn auto_select_mode(
         media_info: &MediaInfo,
@@ -28,45 +28,39 @@ impl ClippingModeSelector {
         if Self::is_copy_mode_viable(media_info, cut_range) {
             return Ok(ClippingMode::Copy);
         }
-        
+
         // Check if hybrid mode is viable
         if Self::is_hybrid_mode_viable(media_info, cut_range) {
             return Ok(ClippingMode::Hybrid);
         }
-        
+
         // Fall back to re-encode mode
         Ok(ClippingMode::Reencode)
     }
-    
+
     /// Check if copy mode is viable for the given content
-    fn is_copy_mode_viable(
-        media_info: &MediaInfo,
-        cut_range: &CutRange,
-    ) -> bool {
+    fn is_copy_mode_viable(media_info: &MediaInfo, cut_range: &CutRange) -> bool {
         // All streams must support copy
         if !media_info.all_streams_support_copy() {
             return false;
         }
-        
+
         // Check keyframe alignment for video streams
         if let Some(video_stream) = media_info.primary_video_stream() {
             let frame_duration = video_stream.frame_duration();
             let tolerance = frame_duration * 0.1; // 10% tolerance
-            
+
             if !cut_range.is_keyframe_aligned(frame_duration, tolerance) {
                 return false;
             }
         }
-        
+
         // Container format should support copy operations
         Self::container_supports_copy(&media_info.container)
     }
-    
+
     /// Check if hybrid mode is viable
-    fn is_hybrid_mode_viable(
-        media_info: &MediaInfo,
-        _cut_range: &CutRange,
-    ) -> bool {
+    fn is_hybrid_mode_viable(media_info: &MediaInfo, _cut_range: &CutRange) -> bool {
         // At least video stream should support copy
         if let Some(video_stream) = media_info.primary_video_stream() {
             video_stream.supports_copy()
@@ -74,10 +68,11 @@ impl ClippingModeSelector {
             false
         }
     }
-    
+
     /// Check if container format supports copy operations
     fn container_supports_copy(format: &str) -> bool {
-        matches!(format.to_lowercase().as_str(), 
+        matches!(
+            format.to_lowercase().as_str(),
             "mp4" | "mkv" | "mov" | "ts" | "mts" | "m2ts"
         )
     }
@@ -106,7 +101,7 @@ impl StreamMapper {
     ) -> Result<Vec<StreamMapping>, DomainError> {
         let mut mappings = Vec::new();
         let mut output_index = 0;
-        
+
         // Map video streams
         for (input_index, video_stream) in media_info.video_streams.iter().enumerate() {
             let copy = Self::should_copy_stream(video_stream, mode);
@@ -118,7 +113,7 @@ impl StreamMapper {
             ));
             output_index += 1;
         }
-        
+
         // Map audio streams
         for (input_index, audio_stream) in media_info.audio_streams.iter().enumerate() {
             let copy = Self::should_copy_stream(audio_stream, mode);
@@ -130,7 +125,7 @@ impl StreamMapper {
             ));
             output_index += 1;
         }
-        
+
         // Map subtitle streams
         for (input_index, subtitle_stream) in media_info.subtitle_streams.iter().enumerate() {
             let copy = Self::should_copy_stream(subtitle_stream, mode);
@@ -142,16 +137,16 @@ impl StreamMapper {
             ));
             output_index += 1;
         }
-        
+
         if mappings.is_empty() {
             return Err(DomainError::BadArgs("No streams found to map".to_string()));
         }
-        
+
         Ok(mappings)
     }
-    
+
     /// Determine if a stream should be copied based on mode and codec support
-    fn should_copy_stream<T>(stream: &T, mode: &ClippingMode) -> bool 
+    fn should_copy_stream<T>(stream: &T, mode: &ClippingMode) -> bool
     where
         T: StreamCopySupport,
     {
@@ -183,7 +178,10 @@ impl StreamCopySupport for AudioStreamInfo {
 
 impl StreamCopySupport for SubtitleStreamInfo {
     fn supports_copy(&self) -> bool {
-        matches!(self.codec.as_str(), "mov_text" | "srt" | "ass" | "ssa" | "subrip")
+        matches!(
+            self.codec.as_str(),
+            "mov_text" | "srt" | "ass" | "ssa" | "subrip"
+        )
     }
 }
 
@@ -199,11 +197,11 @@ impl OutputValidator {
     ) -> ValidationResult {
         let duration_diff = (output_report.duration.seconds - expected_duration.seconds).abs();
         let tolerance_seconds = tolerance_ms as f64 / 1000.0;
-        
+
         let duration_valid = duration_diff <= tolerance_seconds;
         let success_valid = output_report.success;
         let size_valid = output_report.file_size > 0;
-        
+
         ValidationResult {
             duration_valid,
             success_valid,

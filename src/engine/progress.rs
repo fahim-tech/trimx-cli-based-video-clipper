@@ -1,26 +1,26 @@
 //! Progress tracking and callback system for UI integration
 
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use serde::{Serialize, Deserialize};
 
 /// Progress callback trait for UI integration
 pub trait ProgressCallback: Send + Sync {
     /// Called when operation starts
     fn on_start(&self, operation: &str, total_work: Option<u64>);
-    
+
     /// Called during operation progress
     fn on_progress(&self, completed: u64, total: Option<u64>, message: Option<String>);
-    
+
     /// Called when operation completes successfully
     fn on_complete(&self, message: Option<String>);
-    
+
     /// Called when operation fails
     fn on_error(&self, error: &str);
-    
+
     /// Called when operation is cancelled
     fn on_cancel(&self);
-    
+
     /// Check if operation should be cancelled
     fn should_cancel(&self) -> bool;
 }
@@ -72,7 +72,7 @@ pub enum ProgressPhase {
 }
 
 /// Additional progress metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProgressMetrics {
     /// Bytes processed
     pub bytes_processed: u64,
@@ -105,19 +105,6 @@ struct ProgressTrackerInner {
     update_interval: Duration,
 }
 
-impl Default for ProgressMetrics {
-    fn default() -> Self {
-        Self {
-            bytes_processed: 0,
-            bytes_written: 0,
-            frames_processed: None,
-            processing_speed: None,
-            memory_usage: None,
-            temperature: None,
-            gpu_utilization: None,
-        }
-    }
-}
 
 impl ProgressTracker {
     /// Create a new progress tracker
@@ -173,10 +160,8 @@ impl ProgressTracker {
         let should_update = {
             let inner = self.inner.lock().ok();
             match inner {
-                Some(ref inner) => {
-                    inner.last_update.elapsed() >= inner.update_interval
-                }
-                None => false
+                Some(ref inner) => inner.last_update.elapsed() >= inner.update_interval,
+                None => false,
             }
         };
 
@@ -210,7 +195,8 @@ impl ProgressTracker {
 
                 // Calculate throughput
                 if inner.info.elapsed.as_secs_f64() > 0.0 {
-                    inner.info.throughput = Some(completed as f64 / inner.info.elapsed.as_secs_f64());
+                    inner.info.throughput =
+                        Some(completed as f64 / inner.info.elapsed.as_secs_f64());
                 }
             }
         }
@@ -219,9 +205,14 @@ impl ProgressTracker {
     }
 
     /// Update progress with detailed metrics
-    pub fn update_with_metrics(&self, completed: u64, metrics: ProgressMetrics, message: Option<String>) {
+    pub fn update_with_metrics(
+        &self,
+        completed: u64,
+        metrics: ProgressMetrics,
+        message: Option<String>,
+    ) {
         self.update(completed, message);
-        
+
         if let Ok(mut inner) = self.inner.lock() {
             inner.info.metrics = metrics;
         }
@@ -309,9 +300,9 @@ impl ProgressTracker {
     }
 
     /// Notify all callbacks
-    fn notify_callbacks<F>(&self, f: F) 
-    where 
-        F: Fn(&dyn ProgressCallback)
+    fn notify_callbacks<F>(&self, f: F)
+    where
+        F: Fn(&dyn ProgressCallback),
     {
         if let Ok(callbacks) = self.callbacks.lock() {
             for callback in callbacks.iter() {
@@ -348,7 +339,7 @@ impl ProgressCallback for ConsoleProgressCallback {
             let bar_length = 20;
             let filled = (percent / 100.0 * bar_length as f64) as usize;
             let bar = "█".repeat(filled) + &"░".repeat(bar_length - filled);
-            
+
             if let Some(msg) = message {
                 println!("\r🔄 [{}] {:>5.1}% {}", bar, percent, msg);
             } else {
@@ -392,7 +383,9 @@ pub struct JsonProgressCallback {
 
 impl JsonProgressCallback {
     pub fn new(output_progress_events: bool) -> Self {
-        Self { output_progress_events }
+        Self {
+            output_progress_events,
+        }
     }
 }
 
@@ -411,11 +404,7 @@ impl ProgressCallback for JsonProgressCallback {
 
     fn on_progress(&self, completed: u64, total: Option<u64>, message: Option<String>) {
         if self.output_progress_events {
-            let percent = if let Some(total) = total {
-                Some((completed as f64 / total as f64 * 100.0).min(100.0))
-            } else {
-                None
-            };
+              let percent = total.map(|total| (completed as f64 / total as f64 * 100.0).min(100.0));
 
             let event = serde_json::json!({
                 "event": "progress",
@@ -469,7 +458,9 @@ impl ProgressCallback for NoOpProgressCallback {
     fn on_complete(&self, _message: Option<String>) {}
     fn on_error(&self, _error: &str) {}
     fn on_cancel(&self) {}
-    fn should_cancel(&self) -> bool { false }
+    fn should_cancel(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -566,7 +557,7 @@ mod tests {
         tracker.add_callback(callback.clone());
 
         tracker.start("test operation", Some(100));
-        
+
         // Set cancellation flag
         callback.set_should_cancel(true);
         assert!(tracker.is_cancelled());
@@ -586,7 +577,7 @@ mod tests {
         tracker.error("something went wrong");
 
         assert!(callback.error_called.load(Ordering::Relaxed));
-        
+
         let info = tracker.get_info().unwrap();
         assert_eq!(info.phase, ProgressPhase::Failed);
     }

@@ -1,7 +1,7 @@
 //! Command implementations
 
-use std::path::Path;
 use anyhow::Result;
+use std::path::Path;
 use tracing::info;
 
 use crate::cli::{ClipArgs, InspectArgs, VerifyArgs};
@@ -75,7 +75,10 @@ pub fn verify(args: VerifyArgs) -> Result<()> {
 
     // Validate output file exists
     if !Path::new(&args.output).exists() {
-        return Err(anyhow::anyhow!("Output file does not exist: {}", args.output));
+        return Err(anyhow::anyhow!(
+            "Output file does not exist: {}",
+            args.output
+        ));
     }
 
     // Parse time arguments
@@ -106,17 +109,22 @@ pub fn verify(args: VerifyArgs) -> Result<()> {
 /// Generate output filename based on input and time range
 fn generate_output_filename(input_path: &str, start_time: f64, end_time: f64) -> Result<String> {
     let path = Path::new(input_path);
-    let stem = path.file_stem()
+    let stem = path
+        .file_stem()
         .ok_or_else(|| anyhow::anyhow!("Invalid input file path"))?
         .to_string_lossy();
-    let extension = path.extension()
+    let extension = path
+        .extension()
         .map(|ext| format!(".{}", ext.to_string_lossy()))
         .unwrap_or_else(|| ".mp4".to_string());
 
     let start_str = format_time_short(start_time);
     let end_str = format_time_short(end_time);
-    
-    Ok(format!("{}_clip_{}_{}{}", stem, start_str, end_str, extension))
+
+    Ok(format!(
+        "{}_clip_{}_{}{}",
+        stem, start_str, end_str, extension
+    ))
 }
 
 /// Format time as short string for filename

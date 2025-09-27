@@ -1,9 +1,9 @@
 //! Re-encoding clipping implementation for frame-accurate video clipping
 
-use std::time::Instant;
-use tracing::{info, warn, debug};
-use crate::engine::{EngineConfig, ClippingProgress, ClippingPhase};
+use crate::engine::{ClippingPhase, ClippingProgress, EngineConfig};
 use crate::error::{TrimXError, TrimXResult};
+use std::time::Instant;
+use tracing::{debug, info, warn};
 
 /// Re-encoding clipper for frame-accurate clipping when stream copy is not viable
 pub struct ReencodeClipper {
@@ -44,13 +44,21 @@ impl ReencodeClipper {
         Self {
             debug: false,
             preset: "medium".to_string(), // Balanced speed/quality
-            crf: Some(23), // Default quality
-            bitrate: None, // Use CRF by default
+            crf: Some(23),                // Default quality
+            bitrate: None,                // Use CRF by default
             hw_accel: HardwareAcceleration::Auto, // Auto-detect by default
-            hw_decode: true, // Enable hardware decoding when available
+            hw_decode: true,              // Enable hardware decoding when available
         }
     }
+}
 
+impl Default for ReencodeClipper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReencodeClipper {
     /// Enable debug logging
     pub fn with_debug(mut self) -> Self {
         self.debug = true;
@@ -158,9 +166,15 @@ impl ReencodeClipper {
         info!("Starting re-encoding clipping operation");
         info!("Input: {}", config.input_path);
         info!("Output: {}", config.output_path);
-        info!("Time range: {:.3}s - {:.3}s", config.start_time, config.end_time);
-        info!("Preset: {}, CRF: {:?}, Bitrate: {:?}", self.preset, self.crf, self.bitrate);
-        
+        info!(
+            "Time range: {:.3}s - {:.3}s",
+            config.start_time, config.end_time
+        );
+        info!(
+            "Preset: {}, CRF: {:?}, Bitrate: {:?}",
+            self.preset, self.crf, self.bitrate
+        );
+
         // Resolve hardware acceleration
         let hw_accel = match self.hw_accel {
             HardwareAcceleration::Auto => Self::detect_hardware_acceleration(),
@@ -174,7 +188,10 @@ impl ReencodeClipper {
         match self.execute_reencode(&config, &hw_accel) {
             Ok(progress) => {
                 let elapsed = start_time.elapsed();
-                info!("Re-encoding clipping completed successfully in {:.2}s", elapsed.as_secs_f64());
+                info!(
+                    "Re-encoding clipping completed successfully in {:.2}s",
+                    elapsed.as_secs_f64()
+                );
                 Ok(progress)
             }
             Err(e) => {
@@ -189,15 +206,14 @@ impl ReencodeClipper {
         // Check that input file exists
         if !std::path::Path::new(&config.input_path).exists() {
             return Err(TrimXError::InputFileNotFound {
-                path: config.input_path.clone()
+                path: config.input_path.clone(),
             });
         }
 
         // Check that output directory exists
         if let Some(parent) = std::path::Path::new(&config.output_path).parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| TrimXError::IoError(e))?;
+                std::fs::create_dir_all(parent).map_err(TrimXError::IoError)?;
             }
         }
 
@@ -207,13 +223,13 @@ impl ReencodeClipper {
                 message: format!(
                     "Invalid time range: start ({:.3}s) must be before end ({:.3}s)",
                     config.start_time, config.end_time
-                )
+                ),
             });
         }
 
         if config.start_time < 0.0 {
             return Err(TrimXError::ClippingError {
-                message: "Start time cannot be negative".to_string()
+                message: "Start time cannot be negative".to_string(),
             });
         }
 
@@ -221,7 +237,7 @@ impl ReencodeClipper {
         if let Some(crf) = self.crf {
             if crf > 51 {
                 return Err(TrimXError::ClippingError {
-                    message: format!("CRF value {} is invalid (must be 0-51)", crf)
+                    message: format!("CRF value {} is invalid (must be 0-51)", crf),
                 });
             }
         }
@@ -230,54 +246,73 @@ impl ReencodeClipper {
     }
 
     /// Execute the actual re-encoding operation using FFmpeg
-    fn execute_reencode(&self, config: &EngineConfig, hw_accel: &HardwareAcceleration) -> TrimXResult<ClippingProgress> {
+    fn execute_reencode(
+        &self,
+        config: &EngineConfig,
+        hw_accel: &HardwareAcceleration,
+    ) -> TrimXResult<ClippingProgress> {
         info!("Opening input file for re-encoding");
 
         // Initialize FFmpeg
         ffmpeg_next::init().map_err(|e| TrimXError::ClippingError {
-            message: format!("Failed to initialize FFmpeg: {}", e)
+            message: format!("Failed to initialize FFmpeg: {}", e),
         })?;
 
         // Open input context
-        let mut input_ctx = ffmpeg_next::format::input(&config.input_path)
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to open input file: {}", e)
-            })?;
+        let mut input_ctx = ffmpeg_next::format::input(&config.input_path).map_err(|e| {
+            TrimXError::ClippingError {
+                message: format!("Failed to open input file: {}", e),
+            }
+        })?;
 
         // Find video stream
         let video_stream_index = input_ctx
             .streams()
             .best(ffmpeg_next::media::Type::Video)
             .ok_or_else(|| TrimXError::ClippingError {
-                message: "No video stream found in input file".to_string()
+                message: "No video stream found in input file".to_string(),
             })?
             .index();
 
         // Create output context
-        let mut output_ctx = ffmpeg_next::format::output(&config.output_path)
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to create output file: {}", e)
-            })?;
+        let mut output_ctx = ffmpeg_next::format::output(&config.output_path).map_err(|e| {
+            TrimXError::ClippingError {
+                message: format!("Failed to create output file: {}", e),
+            }
+        })?;
 
         // Setup encoders and decoders with hardware acceleration
-        let (video_decoder, video_encoder) = self.setup_video_transcoding(&input_ctx, &mut output_ctx, video_stream_index, hw_accel)?;
-        
+        let (video_decoder, video_encoder) = self.setup_video_transcoding(
+            &input_ctx,
+            &mut output_ctx,
+            video_stream_index,
+            hw_accel,
+        )?;
+
         // Setup audio pass-through (if audio streams exist)
         self.setup_audio_passthrough(&input_ctx, &mut output_ctx)?;
 
         // Write output header
-        output_ctx.write_header()
+        output_ctx
+            .write_header()
             .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to write output header: {}", e)
+                message: format!("Failed to write output header: {}", e),
             })?;
 
         // Perform the actual transcoding
-        let progress = self.transcode_video(&mut input_ctx, &mut output_ctx, config, video_decoder, video_encoder)?;
+        let progress = self.transcode_video(
+            &mut input_ctx,
+            &mut output_ctx,
+            config,
+            video_decoder,
+            video_encoder,
+        )?;
 
         // Write output trailer
-        output_ctx.write_trailer()
+        output_ctx
+            .write_trailer()
             .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to write output trailer: {}", e)
+                message: format!("Failed to write output trailer: {}", e),
             })?;
 
         info!("Re-encoding operation completed successfully");
@@ -291,32 +326,41 @@ impl ReencodeClipper {
         output_ctx: &mut ffmpeg_next::format::context::Output,
         video_stream_index: usize,
         hw_accel: &HardwareAcceleration,
-    ) -> TrimXResult<(ffmpeg_next::codec::decoder::Video, ffmpeg_next::codec::encoder::video::Video)> {
-        
-        let input_stream = input_ctx.stream(video_stream_index)
-            .ok_or_else(|| TrimXError::ClippingError {
-                message: format!("Video stream {} not found", video_stream_index)
-            })?;
+    ) -> TrimXResult<(
+        ffmpeg_next::codec::decoder::Video,
+        ffmpeg_next::codec::encoder::video::Video,
+    )> {
+        let input_stream =
+            input_ctx
+                .stream(video_stream_index)
+                .ok_or_else(|| TrimXError::ClippingError {
+                    message: format!("Video stream {} not found", video_stream_index),
+                })?;
 
         // Create video decoder
-        let video_decoder = ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to create decoder context: {}", e)
-            })?
-            .decoder()
-            .video()
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to create video decoder: {}", e)
-            })?;
+        let video_decoder =
+            ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())
+                .map_err(|e| TrimXError::ClippingError {
+                    message: format!("Failed to create decoder context: {}", e),
+                })?
+                .decoder()
+                .video()
+                .map_err(|e| TrimXError::ClippingError {
+                    message: format!("Failed to create video decoder: {}", e),
+                })?;
 
         // Select encoder based on hardware acceleration
         let encoder_id = self.select_encoder(hw_accel);
-        info!("Selected encoder: {:?} for hardware acceleration: {:?}", encoder_id, hw_accel);
+        info!(
+            "Selected encoder: {:?} for hardware acceleration: {:?}",
+            encoder_id, hw_accel
+        );
 
         // Create output video stream
-        let mut output_stream = output_ctx.add_stream(ffmpeg_next::codec::encoder::find(encoder_id))
+        let mut output_stream = output_ctx
+            .add_stream(ffmpeg_next::codec::encoder::find(encoder_id))
             .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to add video stream: {}", e)
+                message: format!("Failed to add video stream: {}", e),
             })?;
 
         // Configure video encoder
@@ -324,7 +368,7 @@ impl ReencodeClipper {
             .encoder()
             .video()
             .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to create video encoder: {}", e)
+                message: format!("Failed to create video encoder: {}", e),
             })?;
 
         // Set encoder parameters
@@ -337,8 +381,8 @@ impl ReencodeClipper {
         // Set quality parameters
         if let Some(_crf) = self.crf {
             video_encoder.set_max_bit_rate(0); // No max bitrate for CRF
-            // CRF setting would typically be done via encoder options
-            // This is a placeholder - actual implementation would use av_opt_set
+                                               // CRF setting would typically be done via encoder options
+                                               // This is a placeholder - actual implementation would use av_opt_set
         } else if let Some(bitrate) = self.bitrate {
             video_encoder.set_bit_rate(bitrate as usize);
         }
@@ -394,13 +438,15 @@ impl ReencodeClipper {
         input_ctx: &ffmpeg_next::format::context::Input,
         output_ctx: &mut ffmpeg_next::format::context::Output,
     ) -> TrimXResult<()> {
-        
         // Copy all audio streams as-is
         for input_stream in input_ctx.streams() {
             if input_stream.parameters().medium() == ffmpeg_next::media::Type::Audio {
-                let mut output_stream = output_ctx.add_stream(ffmpeg_next::codec::encoder::find(ffmpeg_next::codec::Id::None))
+                let mut output_stream = output_ctx
+                    .add_stream(ffmpeg_next::codec::encoder::find(
+                        ffmpeg_next::codec::Id::None,
+                    ))
                     .map_err(|e| TrimXError::ClippingError {
-                        message: format!("Failed to add audio stream: {}", e)
+                        message: format!("Failed to add audio stream: {}", e),
                     })?;
 
                 // Copy parameters directly for pass-through
@@ -408,7 +454,10 @@ impl ReencodeClipper {
                 output_stream.set_time_base(input_stream.time_base());
 
                 if self.debug {
-                    debug!("Setup audio pass-through for stream {}", input_stream.index());
+                    debug!(
+                        "Setup audio pass-through for stream {}",
+                        input_stream.index()
+                    );
                 }
             }
         }
@@ -425,15 +474,15 @@ impl ReencodeClipper {
         mut video_decoder: ffmpeg_next::codec::decoder::Video,
         mut video_encoder: ffmpeg_next::codec::encoder::video::Video,
     ) -> TrimXResult<ClippingProgress> {
-        
         let start_time_av = (config.start_time * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
         let end_time_av = (config.end_time * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
 
         // Seek to start time
         if config.start_time > 0.0 {
-            input_ctx.seek(start_time_av, start_time_av..)
+            input_ctx
+                .seek(start_time_av, start_time_av..)
                 .map_err(|e| TrimXError::ClippingError {
-                    message: format!("Failed to seek to start time: {}", e)
+                    message: format!("Failed to seek to start time: {}", e),
                 })?;
         }
 
@@ -447,7 +496,8 @@ impl ReencodeClipper {
             // Check packet timing
             let packet_time = if let Some(pts) = packet.pts() {
                 let stream_tb = input_stream.time_base();
-                pts * stream_tb.numerator() as i64 / stream_tb.denominator() as i64 * ffmpeg_next::ffi::AV_TIME_BASE as i64
+                pts * stream_tb.numerator() as i64 / stream_tb.denominator() as i64
+                    * ffmpeg_next::ffi::AV_TIME_BASE as i64
             } else {
                 continue;
             };
@@ -461,27 +511,30 @@ impl ReencodeClipper {
 
             // Handle video packets (decode + encode)
             if input_stream.parameters().medium() == ffmpeg_next::media::Type::Video {
-                video_decoder.send_packet(&packet)
+                video_decoder
+                    .send_packet(&packet)
                     .map_err(|e| TrimXError::ClippingError {
-                        message: format!("Failed to send packet to decoder: {}", e)
+                        message: format!("Failed to send packet to decoder: {}", e),
                     })?;
 
                 let mut frame = ffmpeg_next::util::frame::video::Video::empty();
                 while video_decoder.receive_frame(&mut frame).is_ok() {
                     // Send frame to encoder
-                    video_encoder.send_frame(&frame)
+                    video_encoder
+                        .send_frame(&frame)
                         .map_err(|e| TrimXError::ClippingError {
-                            message: format!("Failed to send frame to encoder: {}", e)
+                            message: format!("Failed to send frame to encoder: {}", e),
                         })?;
 
                     // Receive encoded packets
                     let mut encoded_packet = ffmpeg_next::codec::packet::Packet::empty();
                     while video_encoder.receive_packet(&mut encoded_packet).is_ok() {
                         // Write to output
-                        encoded_packet.write_interleaved(output_ctx)
-                            .map_err(|e| TrimXError::ClippingError {
-                                message: format!("Failed to write encoded packet: {}", e)
-                            })?;
+                        encoded_packet.write_interleaved(output_ctx).map_err(|e| {
+                            TrimXError::ClippingError {
+                                message: format!("Failed to write encoded packet: {}", e),
+                            }
+                        })?;
 
                         bytes_written += encoded_packet.size() as u64;
                         frames_processed += 1;
@@ -494,43 +547,53 @@ impl ReencodeClipper {
                 if let Some(output_stream) = output_ctx.stream(input_stream.index()) {
                     let mut audio_packet = packet;
                     audio_packet.rescale_ts(input_stream.time_base(), output_stream.time_base());
-                    
-                    audio_packet.write_interleaved(output_ctx)
-                        .map_err(|e| TrimXError::ClippingError {
-                            message: format!("Failed to write audio packet: {}", e)
-                        })?;
+
+                    audio_packet.write_interleaved(output_ctx).map_err(|e| {
+                        TrimXError::ClippingError {
+                            message: format!("Failed to write audio packet: {}", e),
+                        }
+                    })?;
                 }
             }
 
             // Log progress periodically
             if self.debug && frames_processed % 100 == 0 {
-                debug!("Processed {} frames, {} bytes written", frames_processed, bytes_written);
+                debug!(
+                    "Processed {} frames, {} bytes written",
+                    frames_processed, bytes_written
+                );
             }
         }
 
         // Flush encoders
-        video_encoder.send_eof()
+        video_encoder
+            .send_eof()
             .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to flush video encoder: {}", e)
+                message: format!("Failed to flush video encoder: {}", e),
             })?;
 
         let mut encoded_packet = ffmpeg_next::codec::packet::Packet::empty();
         while video_encoder.receive_packet(&mut encoded_packet).is_ok() {
-            encoded_packet.write_interleaved(output_ctx)
-                .map_err(|e| TrimXError::ClippingError {
-                    message: format!("Failed to write final packet: {}", e)
-                })?;
+            encoded_packet.write_interleaved(output_ctx).map_err(|e| {
+                TrimXError::ClippingError {
+                    message: format!("Failed to write final packet: {}", e),
+                }
+            })?;
             bytes_written += encoded_packet.size() as u64;
         }
 
-        info!("Processed {} frames, wrote {:.2} MB", frames_processed, bytes_written as f64 / 1024.0 / 1024.0);
+        info!(
+            "Processed {} frames, wrote {:.2} MB",
+            frames_processed,
+            bytes_written as f64 / 1024.0 / 1024.0
+        );
 
         Ok(ClippingProgress {
             phase: ClippingPhase::Completed,
             progress: 100.0,
             description: format!(
-                "Re-encoding completed: {} frames, {:.2} MB", 
-                frames_processed, 
+                "Re-encoding completed: {} frames, {:.2} MB",
+                frames_processed,
                 bytes_written as f64 / 1024.0 / 1024.0
             ),
             eta: None,
@@ -541,7 +604,7 @@ impl ReencodeClipper {
     pub fn estimate_output_size(&self, config: &EngineConfig) -> TrimXResult<u64> {
         // For re-encoding, estimate based on target bitrate and duration
         let duration = config.end_time - config.start_time;
-        
+
         if let Some(bitrate) = self.bitrate {
             // Bitrate-based estimation
             let estimated_size = (bitrate * duration as u64) / 8; // Convert from bits to bytes
@@ -549,12 +612,12 @@ impl ReencodeClipper {
         } else {
             // For CRF, estimate based on input file proportionally with quality factor
             let input_size = std::fs::metadata(&config.input_path)
-                .map_err(|e| TrimXError::IoError(e))?
+                .map_err(TrimXError::IoError)?
                 .len();
 
             let input_duration = self.get_input_duration(config)?;
             let duration_ratio = duration / input_duration;
-            
+
             // Apply quality factor - lower CRF means larger files
             let quality_factor = if let Some(crf) = self.crf {
                 // Rough approximation: CRF 18 ≈ 1.5x, CRF 23 ≈ 1.0x, CRF 28 ≈ 0.7x
@@ -571,13 +634,14 @@ impl ReencodeClipper {
     /// Get the duration of the input file
     fn get_input_duration(&self, config: &EngineConfig) -> TrimXResult<f64> {
         ffmpeg_next::init().map_err(|e| TrimXError::ClippingError {
-            message: format!("Failed to initialize FFmpeg: {}", e)
+            message: format!("Failed to initialize FFmpeg: {}", e),
         })?;
 
-        let input_ctx = ffmpeg_next::format::input(&config.input_path)
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to open input file: {}", e)
-            })?;
+        let input_ctx = ffmpeg_next::format::input(&config.input_path).map_err(|e| {
+            TrimXError::ClippingError {
+                message: format!("Failed to open input file: {}", e),
+            }
+        })?;
 
         let duration_seconds = input_ctx.duration() as f64 / ffmpeg_next::ffi::AV_TIME_BASE as f64;
         Ok(duration_seconds)

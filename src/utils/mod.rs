@@ -14,6 +14,7 @@ pub struct Utils;
 
 impl Utils {
     /// Create a new utils instance
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }

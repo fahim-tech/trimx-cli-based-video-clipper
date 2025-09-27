@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use crate::app::{clip_interactor::ClipInteractor, inspect_interactor::InspectInteractor, verify_interactor::VerifyInteractor};
 use crate::adapters::{
-    FsWindowsAdapter,
-    MockExecutionAdapter,
-    MockProbeAdapter,
-    TomlConfigAdapter,
-    TracingLogAdapter,
+    FsWindowsAdapter, MockExecutionAdapter, MockProbeAdapter, TomlConfigAdapter, TracingLogAdapter,
+};
+use crate::app::{
+    clip_interactor::ClipInteractor, inspect_interactor::InspectInteractor,
+    verify_interactor::VerifyInteractor,
 };
 use crate::domain::errors::DomainError;
 use crate::ports::{ConfigPort, ExecutePort, FsPort, LogPort, ProbePort};
@@ -72,4 +71,3 @@ impl AppContainer for DefaultAppContainer {
         Arc::clone(&self.verify_interactor)
     }
 }
-

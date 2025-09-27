@@ -1,8 +1,8 @@
 // Domain models - Core types and data structures
 
-use std::time::Duration;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
+use std::time::Duration;
 
 /// Memory usage statistics
 #[derive(Debug, Clone)]
@@ -11,8 +11,8 @@ pub struct MemoryUsage {
     pub available_memory: u64,
     pub peak_memory: u64,
 }
-use std::ops::Add;
 use crate::domain::errors::DomainError;
+use std::ops::Add;
 
 /// Time specification with precision - represents time in seconds with fractional precision
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -22,7 +22,7 @@ pub struct TimeSpec {
 
 impl std::ops::Sub for TimeSpec {
     type Output = TimeSpec;
-    
+
     fn sub(self, other: TimeSpec) -> TimeSpec {
         TimeSpec {
             seconds: self.seconds - other.seconds,
@@ -35,35 +35,41 @@ impl TimeSpec {
     pub fn from_seconds(seconds: f64) -> Self {
         Self { seconds }
     }
-    
+
     /// Convert to seconds
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_seconds(&self) -> f64 {
         self.seconds
     }
-    
+
     /// Create a new TimeSpec from hours, minutes, seconds, milliseconds
     pub fn from_components(hours: u32, minutes: u32, seconds: u32, milliseconds: u32) -> Self {
-        let total_seconds = hours as f64 * 3600.0 + 
-                           minutes as f64 * 60.0 + 
-                           seconds as f64 + 
-                           milliseconds as f64 / 1000.0;
-        Self { seconds: total_seconds }
+        let total_seconds = hours as f64 * 3600.0
+            + minutes as f64 * 60.0
+            + seconds as f64
+            + milliseconds as f64 / 1000.0;
+        Self {
+            seconds: total_seconds,
+        }
     }
-    
+
     /// Convert to Duration
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_duration(&self) -> Duration {
         Duration::from_secs_f64(self.seconds)
     }
-    
+
     /// Convert from Duration
     pub fn from_duration(duration: Duration) -> Self {
-        Self { seconds: duration.as_secs_f64() }
+        Self {
+            seconds: duration.as_secs_f64(),
+        }
     }
-    
+
     /// Parse time string in various formats
     pub fn parse(time_str: &str) -> Result<Self, DomainError> {
         let trimmed = time_str.trim();
-        
+
         // Try parsing as seconds (float)
         if let Ok(seconds) = trimmed.parse::<f64>() {
             if seconds < 0.0 {
@@ -71,57 +77,75 @@ impl TimeSpec {
             }
             return Ok(Self::from_seconds(seconds));
         }
-        
+
         // Try parsing as HH:MM:SS.ms or MM:SS.ms
         let parts: Vec<&str> = trimmed.split(':').collect();
         if parts.len() == 2 {
             // MM:SS.ms format
-            let minutes = parts[0].parse::<u32>()
+            let minutes = parts[0]
+                .parse::<u32>()
                 .map_err(|_| DomainError::BadArgs("Invalid minutes format".to_string()))?;
-            let seconds_part = parts[1].parse::<f64>()
+            let seconds_part = parts[1]
+                .parse::<f64>()
                 .map_err(|_| DomainError::BadArgs("Invalid seconds format".to_string()))?;
-            
+
             if minutes >= 60 {
-                return Err(DomainError::BadArgs("Minutes must be less than 60".to_string()));
+                return Err(DomainError::BadArgs(
+                    "Minutes must be less than 60".to_string(),
+                ));
             }
             if seconds_part >= 60.0 {
-                return Err(DomainError::BadArgs("Seconds must be less than 60".to_string()));
+                return Err(DomainError::BadArgs(
+                    "Seconds must be less than 60".to_string(),
+                ));
             }
-            
+
             Ok(Self::from_seconds(minutes as f64 * 60.0 + seconds_part))
         } else if parts.len() == 3 {
             // HH:MM:SS.ms format
-            let hours = parts[0].parse::<u32>()
+            let hours = parts[0]
+                .parse::<u32>()
                 .map_err(|_| DomainError::BadArgs("Invalid hours format".to_string()))?;
-            let minutes = parts[1].parse::<u32>()
+            let minutes = parts[1]
+                .parse::<u32>()
                 .map_err(|_| DomainError::BadArgs("Invalid minutes format".to_string()))?;
-            let seconds_part = parts[2].parse::<f64>()
+            let seconds_part = parts[2]
+                .parse::<f64>()
                 .map_err(|_| DomainError::BadArgs("Invalid seconds format".to_string()))?;
-            
+
             if minutes >= 60 {
-                return Err(DomainError::BadArgs("Minutes must be less than 60".to_string()));
+                return Err(DomainError::BadArgs(
+                    "Minutes must be less than 60".to_string(),
+                ));
             }
             if seconds_part >= 60.0 {
-                return Err(DomainError::BadArgs("Seconds must be less than 60".to_string()));
+                return Err(DomainError::BadArgs(
+                    "Seconds must be less than 60".to_string(),
+                ));
             }
-            
-            Ok(Self::from_seconds(hours as f64 * 3600.0 + minutes as f64 * 60.0 + seconds_part))
+
+            Ok(Self::from_seconds(
+                hours as f64 * 3600.0 + minutes as f64 * 60.0 + seconds_part,
+            ))
         } else {
             Err(DomainError::BadArgs(
                 "Invalid time format. Supported formats: seconds (e.g., 123.45), MM:SS.ms (e.g., 2:30.5), HH:MM:SS.ms (e.g., 1:02:30.5)".to_string()
             ))
         }
     }
-    
+
     /// Format as HH:MM:SS.ms
     pub fn format_hms(&self) -> String {
         let hours = (self.seconds / 3600.0) as u32;
         let minutes = ((self.seconds % 3600.0) / 60.0) as u32;
         let seconds = (self.seconds % 60.0) as u32;
         let milliseconds = ((self.seconds % 1.0) * 1000.0) as u32;
-        
+
         if hours > 0 {
-            format!("{}:{:02}:{:02}.{:03}", hours, minutes, seconds, milliseconds)
+            format!(
+                "{}:{:02}:{:02}.{:03}",
+                hours, minutes, seconds, milliseconds
+            )
         } else {
             format!("{}:{:02}.{:03}", minutes, seconds, milliseconds)
         }
@@ -136,7 +160,7 @@ impl fmt::Display for TimeSpec {
 
 impl Add for TimeSpec {
     type Output = TimeSpec;
-    
+
     fn add(self, other: TimeSpec) -> TimeSpec {
         TimeSpec {
             seconds: self.seconds + other.seconds,
@@ -155,52 +179,61 @@ impl Timebase {
     /// Create a new timebase
     pub fn new(num: i32, den: i32) -> Result<Self, DomainError> {
         if den == 0 {
-            return Err(DomainError::BadArgs("Timebase denominator cannot be zero".to_string()));
+            return Err(DomainError::BadArgs(
+                "Timebase denominator cannot be zero".to_string(),
+            ));
         }
         Ok(Self { num, den })
     }
-    
+
     /// Convert to floating point seconds
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_seconds(&self) -> f64 {
         self.num as f64 / self.den as f64
     }
-    
+
     /// Rescale PTS from this timebase to target timebase
     pub fn rescale_pts(&self, pts: i64, target: &Timebase) -> i64 {
         if self.den == target.den && self.num == target.num {
             return pts;
         }
-        
+
         // Convert to seconds and back to target timebase
         let seconds = pts as f64 * self.to_seconds();
         (seconds / target.to_seconds()) as i64
     }
-    
+
     /// Convert PTS to seconds
     pub fn pts_to_seconds(&self, pts: i64) -> f64 {
         pts as f64 * self.to_seconds()
     }
-    
+
     /// Convert seconds to PTS
     pub fn seconds_to_pts(&self, seconds: f64) -> i64 {
         (seconds / self.to_seconds()) as i64
     }
-    
+
     /// Common timebases
     pub fn av_time_base() -> Self {
-        Self { num: 1, den: 1000000 } // microseconds
+        Self {
+            num: 1,
+            den: 1000000,
+        } // microseconds
     }
-    
+
     pub fn frame_rate_30() -> Self {
         Self { num: 1, den: 30 }
     }
-    
+
     pub fn frame_rate_25() -> Self {
         Self { num: 1, den: 25 }
     }
-    
+
     pub fn frame_rate_24() -> Self {
-        Self { num: 1001, den: 24000 } // 23.976 fps
+        Self {
+            num: 1001,
+            den: 24000,
+        } // 23.976 fps
     }
 }
 
@@ -232,12 +265,16 @@ impl VideoStreamInfo {
         timebase: Timebase,
     ) -> Result<Self, DomainError> {
         if width == 0 || height == 0 {
-            return Err(DomainError::BadArgs("Video dimensions cannot be zero".to_string()));
+            return Err(DomainError::BadArgs(
+                "Video dimensions cannot be zero".to_string(),
+            ));
         }
         if frame_rate <= 0.0 {
-            return Err(DomainError::BadArgs("Frame rate must be positive".to_string()));
+            return Err(DomainError::BadArgs(
+                "Frame rate must be positive".to_string(),
+            ));
         }
-        
+
         Ok(Self {
             index,
             codec,
@@ -253,17 +290,17 @@ impl VideoStreamInfo {
             keyframe_interval: None,
         })
     }
-    
+
     /// Get aspect ratio
     pub fn aspect_ratio(&self) -> f64 {
         self.width as f64 / self.height as f64
     }
-    
+
     /// Check if codec supports copy mode
     pub fn supports_copy(&self) -> bool {
         matches!(self.codec.as_str(), "h264" | "hevc" | "vp9" | "av1")
     }
-    
+
     /// Get frame duration in seconds
     pub fn frame_duration(&self) -> f64 {
         1.0 / self.frame_rate
@@ -295,12 +332,16 @@ impl AudioStreamInfo {
         timebase: Timebase,
     ) -> Result<Self, DomainError> {
         if sample_rate == 0 {
-            return Err(DomainError::BadArgs("Sample rate cannot be zero".to_string()));
+            return Err(DomainError::BadArgs(
+                "Sample rate cannot be zero".to_string(),
+            ));
         }
         if channels == 0 {
-            return Err(DomainError::BadArgs("Channel count cannot be zero".to_string()));
+            return Err(DomainError::BadArgs(
+                "Channel count cannot be zero".to_string(),
+            ));
         }
-        
+
         Ok(Self {
             index,
             codec,
@@ -314,12 +355,12 @@ impl AudioStreamInfo {
             channel_layout: None,
         })
     }
-    
+
     /// Check if codec supports copy mode
     pub fn supports_copy(&self) -> bool {
         matches!(self.codec.as_str(), "aac" | "mp3" | "ac3" | "eac3" | "pcm")
     }
-    
+
     /// Get bytes per sample
     pub fn bytes_per_sample(&self) -> usize {
         match self.codec.as_str() {
@@ -358,10 +399,13 @@ impl SubtitleStreamInfo {
             timebase: Timebase::av_time_base(),
         }
     }
-    
+
     /// Check if subtitle codec supports copy mode
     pub fn supports_copy(&self) -> bool {
-        matches!(self.codec.as_str(), "mov_text" | "srt" | "ass" | "ssa" | "subrip")
+        matches!(
+            self.codec.as_str(),
+            "mov_text" | "srt" | "ass" | "ssa" | "subrip"
+        )
     }
 }
 
@@ -392,10 +436,10 @@ impl MediaInfo {
         if file_size == 0 {
             return Err(DomainError::BadArgs("File size cannot be zero".to_string()));
         }
-        
+
         // Calculate duration from streams
         let duration = Self::calculate_duration(&video_streams, &audio_streams)?;
-        
+
         Ok(Self {
             path,
             duration,
@@ -408,58 +452,60 @@ impl MediaInfo {
             metadata: std::collections::HashMap::new(),
         })
     }
-    
+
     /// Calculate duration from stream information
     fn calculate_duration(
         video_streams: &[VideoStreamInfo],
         audio_streams: &[AudioStreamInfo],
     ) -> Result<TimeSpec, DomainError> {
         let mut max_duration = TimeSpec::from_seconds(0.0);
-        
+
         // Use video stream duration if available
         for stream in video_streams {
             if let Some(duration) = &stream.duration {
                 if duration.seconds > max_duration.seconds {
-                    max_duration = duration.clone();
+                    max_duration = *duration;
                 }
             }
         }
-        
+
         // Fall back to audio stream duration
         if max_duration.seconds == 0.0 {
             for stream in audio_streams {
                 if let Some(duration) = &stream.duration {
                     if duration.seconds > max_duration.seconds {
-                        max_duration = duration.clone();
+                        max_duration = *duration;
                     }
                 }
             }
         }
-        
+
         if max_duration.seconds == 0.0 {
-            return Err(DomainError::ProbeFail("Could not determine media duration".to_string()));
+            return Err(DomainError::ProbeFail(
+                "Could not determine media duration".to_string(),
+            ));
         }
-        
+
         Ok(max_duration)
     }
-    
+
     /// Get primary video stream (usually the first one)
     pub fn primary_video_stream(&self) -> Option<&VideoStreamInfo> {
         self.video_streams.first()
     }
-    
+
     /// Get primary audio stream
     pub fn primary_audio_stream(&self) -> Option<&AudioStreamInfo> {
         self.audio_streams.first()
     }
-    
+
     /// Check if all streams support copy mode
     pub fn all_streams_support_copy(&self) -> bool {
-        self.video_streams.iter().all(|s| s.supports_copy()) &&
-        self.audio_streams.iter().all(|s| s.supports_copy()) &&
-        self.subtitle_streams.iter().all(|s| s.supports_copy())
+        self.video_streams.iter().all(|s| s.supports_copy())
+            && self.audio_streams.iter().all(|s| s.supports_copy())
+            && self.subtitle_streams.iter().all(|s| s.supports_copy())
     }
-    
+
     /// Get total number of streams
     pub fn total_streams(&self) -> usize {
         self.video_streams.len() + self.audio_streams.len() + self.subtitle_streams.len()
@@ -493,35 +539,41 @@ impl CutRange {
     /// Create new cut range with validation
     pub fn new(start: TimeSpec, end: TimeSpec) -> Result<Self, DomainError> {
         if start.seconds < 0.0 {
-            return Err(DomainError::OutOfRange("Start time cannot be negative".to_string()));
+            return Err(DomainError::OutOfRange(
+                "Start time cannot be negative".to_string(),
+            ));
         }
         if end.seconds <= start.seconds {
-            return Err(DomainError::OutOfRange("End time must be after start time".to_string()));
+            return Err(DomainError::OutOfRange(
+                "End time must be after start time".to_string(),
+            ));
         }
-        
+
         Ok(Self { start, end })
     }
-    
+
     /// Get duration of the cut range
     pub fn duration(&self) -> TimeSpec {
         TimeSpec::from_seconds(self.end.seconds - self.start.seconds)
     }
-    
+
     /// Validate against media duration
     pub fn validate_against_duration(&self, media_duration: &TimeSpec) -> Result<(), DomainError> {
         if self.start.seconds >= media_duration.seconds {
-            return Err(DomainError::OutOfRange(
-                format!("Start time {} exceeds media duration {}", self.start, media_duration)
-            ));
+            return Err(DomainError::OutOfRange(format!(
+                "Start time {} exceeds media duration {}",
+                self.start, media_duration
+            )));
         }
         if self.end.seconds > media_duration.seconds {
-            return Err(DomainError::OutOfRange(
-                format!("End time {} exceeds media duration {}", self.end, media_duration)
-            ));
+            return Err(DomainError::OutOfRange(format!(
+                "End time {} exceeds media duration {}",
+                self.end, media_duration
+            )));
         }
         Ok(())
     }
-    
+
     /// Check if range is valid for copy mode (keyframe aligned)
     pub fn is_keyframe_aligned(&self, frame_duration: f64, tolerance: f64) -> bool {
         let start_aligned = (self.start.seconds / frame_duration).fract().abs() < tolerance;
@@ -547,12 +599,13 @@ impl ClippingMode {
             "copy" => Ok(Self::Copy),
             "reencode" => Ok(Self::Reencode),
             "hybrid" => Ok(Self::Hybrid),
-            _ => Err(DomainError::BadArgs(
-                format!("Invalid clipping mode: {}. Valid modes: auto, copy, reencode, hybrid", mode_str)
-            )),
+            _ => Err(DomainError::BadArgs(format!(
+                "Invalid clipping mode: {}. Valid modes: auto, copy, reencode, hybrid",
+                mode_str
+            ))),
         }
     }
-    
+
     /// Get description of the mode
     pub fn description(&self) -> &'static str {
         match self {
@@ -583,7 +636,12 @@ pub enum StreamType {
 
 impl StreamMapping {
     /// Create new stream mapping
-    pub fn new(input_index: usize, output_index: usize, copy: bool, stream_type: StreamType) -> Self {
+    pub fn new(
+        input_index: usize,
+        output_index: usize,
+        copy: bool,
+        stream_type: StreamType,
+    ) -> Self {
         Self {
             input_index,
             output_index,
@@ -612,10 +670,12 @@ impl QualitySettings {
     ) -> Result<Self, DomainError> {
         if let Some(crf_value) = crf {
             if crf_value > 51 {
-                return Err(DomainError::BadArgs("CRF value cannot exceed 51".to_string()));
+                return Err(DomainError::BadArgs(
+                    "CRF value cannot exceed 51".to_string(),
+                ));
             }
         }
-        
+
         Ok(Self {
             preset,
             crf,
@@ -623,9 +683,21 @@ impl QualitySettings {
             hardware_acceleration,
         })
     }
-    
+
     /// Get default quality settings
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
+        Self {
+            preset: "medium".to_string(),
+            crf: Some(18),
+            bitrate: None,
+            hardware_acceleration: false,
+        }
+    }
+}
+
+impl Default for QualitySettings {
+    fn default() -> Self {
         Self {
             preset: "medium".to_string(),
             crf: Some(18),
@@ -659,15 +731,21 @@ impl ExecutionPlan {
         container_format: String,
     ) -> Result<Self, DomainError> {
         if input_file.is_empty() {
-            return Err(DomainError::BadArgs("Input file cannot be empty".to_string()));
+            return Err(DomainError::BadArgs(
+                "Input file cannot be empty".to_string(),
+            ));
         }
         if output_file.is_empty() {
-            return Err(DomainError::BadArgs("Output file cannot be empty".to_string()));
+            return Err(DomainError::BadArgs(
+                "Output file cannot be empty".to_string(),
+            ));
         }
         if streams.is_empty() {
-            return Err(DomainError::BadArgs("At least one stream must be mapped".to_string()));
+            return Err(DomainError::BadArgs(
+                "At least one stream must be mapped".to_string(),
+            ));
         }
-        
+
         Ok(Self {
             mode,
             input_file,
@@ -712,7 +790,7 @@ impl OutputReport {
             last_pts: None,
         }
     }
-    
+
     /// Create failed output report
     pub fn failure(mode_used: ClippingMode, error_message: String) -> Self {
         Self {
@@ -745,13 +823,9 @@ impl InspectRequest {
             include_metadata: true,
         }
     }
-    
+
     /// Create new inspect request with specific options
-    pub fn with_options(
-        input_file: String,
-        include_streams: bool,
-        include_metadata: bool,
-    ) -> Self {
+    pub fn with_options(input_file: String, include_streams: bool, include_metadata: bool) -> Self {
         Self {
             input_file,
             include_streams,
@@ -777,7 +851,7 @@ impl InspectResponse {
             error_message: None,
         }
     }
-    
+
     /// Create failed inspect response
     pub fn failure(error_message: String) -> Self {
         Self {
@@ -789,12 +863,12 @@ impl InspectResponse {
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
-            ).unwrap_or_else(|_| panic!("Failed to create default MediaInfo")),
+            )
+            .unwrap_or_else(|_| panic!("Failed to create default MediaInfo")),
             error_message: Some(error_message),
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests;

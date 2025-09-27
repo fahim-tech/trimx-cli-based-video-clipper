@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod strategy;
 pub mod gop;
 pub mod keyframe_analyzer;
+pub mod strategy;
 
 /// Clipping strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]

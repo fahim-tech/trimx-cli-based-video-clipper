@@ -4,17 +4,17 @@ use serde::{Deserialize, Serialize};
 
 pub mod clipper;
 pub mod copy;
-pub mod reencode;
 pub mod hybrid;
 pub mod progress;
+pub mod reencode;
 
 // Re-export the clipper types
 pub use copy::StreamCopyClipper;
-pub use reencode::ReencodeClipper;
 pub use hybrid::HybridClipper;
+pub use reencode::ReencodeClipper;
 
 // Re-export progress types
-pub use progress::{ProgressTracker};
+pub use progress::ProgressTracker;
 
 /// Clipping engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

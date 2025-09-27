@@ -1,9 +1,9 @@
 //! Video inspection implementation
 
+use crate::error::{TrimXError, TrimXResult};
+use crate::probe::MediaInfo;
 use std::path::Path;
 use tracing::info;
-use crate::probe::MediaInfo;
-use crate::error::{TrimXError, TrimXResult};
 
 /// Video inspector for analyzing media files
 pub struct VideoInspector;
@@ -20,12 +20,14 @@ impl VideoInspector {
 
         // Check if file exists
         if !Path::new(path).exists() {
-            return Err(TrimXError::InputFileNotFound { path: path.to_string() });
+            return Err(TrimXError::InputFileNotFound {
+                path: path.to_string(),
+            });
         }
 
         // Get file size
         let file_size = std::fs::metadata(path)
-            .map_err(|e| TrimXError::IoError(e))?
+            .map_err(TrimXError::IoError)?
             .len();
 
         // Create placeholder media info
@@ -50,15 +52,20 @@ impl VideoInspector {
     /// Generate output filename
     pub fn generate_filename(&self, input: &str, start: f64, end: f64) -> TrimXResult<String> {
         let path = Path::new(input);
-        let stem = path.file_stem()
-            .ok_or_else(|| TrimXError::ClippingError { 
-                message: "Invalid input file path".to_string() 
+        let stem = path
+            .file_stem()
+            .ok_or_else(|| TrimXError::ClippingError {
+                message: "Invalid input file path".to_string(),
             })?
             .to_string_lossy();
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .map(|ext| format!(".{}", ext.to_string_lossy()))
             .unwrap_or_else(|| ".mp4".to_string());
 
-        Ok(format!("{}_clip_{:.1}_{:.1}{}", stem, start, end, extension))
+        Ok(format!(
+            "{}_clip_{:.1}_{:.1}{}",
+            stem, start, end, extension
+        ))
     }
 }

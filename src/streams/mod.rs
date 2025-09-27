@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod audio_mapper;
 pub mod mapper;
 pub mod processor;
-pub mod audio_mapper;
 pub mod subtitle_processor;
 
 /// Stream mapping configuration

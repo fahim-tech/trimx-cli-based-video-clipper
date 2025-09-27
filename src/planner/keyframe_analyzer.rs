@@ -1,8 +1,8 @@
 //! Advanced keyframe analysis for precise GOP detection
 
-use std::collections::HashMap;
-use tracing::{info, debug, warn};
 use crate::error::{TrimXError, TrimXResult};
+use std::collections::HashMap;
+use tracing::{debug, info, warn};
 
 /// Advanced keyframe analyzer for GOP structure analysis
 pub struct KeyframeAnalyzer {
@@ -74,11 +74,19 @@ impl KeyframeAnalyzer {
     pub fn new() -> Self {
         Self {
             debug: false,
-            max_keyframes: 10000, // Reasonable limit for performance
+            max_keyframes: 10000,       // Reasonable limit for performance
             alignment_tolerance: 0.033, // ~1 frame at 30fps
         }
     }
+}
 
+impl Default for KeyframeAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KeyframeAnalyzer {
     /// Enable debug logging
     pub fn with_debug(mut self) -> Self {
         self.debug = true;
@@ -98,51 +106,61 @@ impl KeyframeAnalyzer {
     }
 
     /// Perform comprehensive GOP analysis on a video file
-    pub fn analyze_gop_structure(&self, input_path: &str, stream_index: usize) -> TrimXResult<GOPAnalysis> {
+    pub fn analyze_gop_structure(
+        &self,
+        input_path: &str,
+        stream_index: usize,
+    ) -> TrimXResult<GOPAnalysis> {
         info!("Starting comprehensive GOP analysis for: {}", input_path);
-        
+
         // Initialize FFmpeg
         ffmpeg_next::init().map_err(|e| TrimXError::ClippingError {
-            message: format!("Failed to initialize FFmpeg: {}", e)
+            message: format!("Failed to initialize FFmpeg: {}", e),
         })?;
 
         // Open input file
-        let mut input_ctx = ffmpeg_next::format::input(input_path)
-            .map_err(|e| TrimXError::ClippingError {
-                message: format!("Failed to open input file: {}", e)
+        let mut input_ctx =
+            ffmpeg_next::format::input(input_path).map_err(|e| TrimXError::ClippingError {
+                message: format!("Failed to open input file: {}", e),
             })?;
 
         // Get video stream
-        let stream = input_ctx.stream(stream_index)
+        let stream = input_ctx
+            .stream(stream_index)
             .ok_or_else(|| TrimXError::ClippingError {
-                message: format!("Stream {} not found", stream_index)
+                message: format!("Stream {} not found", stream_index),
             })?;
 
         if stream.parameters().medium() != ffmpeg_next::media::Type::Video {
             return Err(TrimXError::ClippingError {
-                message: format!("Stream {} is not a video stream", stream_index)
+                message: format!("Stream {} is not a video stream", stream_index),
             });
         }
 
         let timebase = stream.time_base();
         let frame_rate = self.estimate_frame_rate(&stream);
-        
-        info!("Video stream info: timebase={:?}, estimated_fps={:.2}", timebase, frame_rate);
+
+        info!(
+            "Video stream info: timebase={:?}, estimated_fps={:.2}",
+            timebase, frame_rate
+        );
 
         // Analyze keyframes
         let keyframes = self.extract_keyframes(&mut input_ctx, stream_index, timebase)?;
-        
+
         if keyframes.is_empty() {
             return Err(TrimXError::ClippingError {
-                message: "No keyframes found in video stream".to_string()
+                message: "No keyframes found in video stream".to_string(),
             });
         }
 
         // Perform GOP analysis
         let analysis = self.analyze_keyframes(keyframes, frame_rate)?;
-        
-        info!("GOP analysis complete: {} keyframes, avg_duration={:.3}s, regularity={:.2}", 
-              analysis.keyframe_count, analysis.avg_gop_duration, analysis.regularity_score);
+
+        info!(
+            "GOP analysis complete: {} keyframes, avg_duration={:.3}s, regularity={:.2}",
+            analysis.keyframe_count, analysis.avg_gop_duration, analysis.regularity_score
+        );
 
         Ok(analysis)
     }
@@ -169,9 +187,12 @@ impl KeyframeAnalyzer {
             frame_number += 1;
 
             // Check if this is a keyframe
-            if packet.flags().contains(ffmpeg_next::codec::packet::Flags::KEY) {
+            if packet
+                .flags()
+                .contains(ffmpeg_next::codec::packet::Flags::KEY)
+            {
                 let timestamp = self.pts_to_seconds(packet.pts().unwrap_or(0), timebase);
-                
+
                 let keyframe_info = DetailedKeyframeInfo {
                     timestamp,
                     frame_number,
@@ -192,21 +213,32 @@ impl KeyframeAnalyzer {
 
                 // Limit keyframes to prevent excessive memory usage
                 if keyframes.len() >= self.max_keyframes {
-                    warn!("Reached maximum keyframe limit ({}), stopping analysis", self.max_keyframes);
+                    warn!(
+                        "Reached maximum keyframe limit ({}), stopping analysis",
+                        self.max_keyframes
+                    );
                     break;
                 }
             }
         }
 
-        debug!("Extracted {} keyframes from {} total frames", keyframes.len(), frame_number);
+        debug!(
+            "Extracted {} keyframes from {} total frames",
+            keyframes.len(),
+            frame_number
+        );
         Ok(keyframes)
     }
 
     /// Analyze keyframes to determine GOP structure
-    fn analyze_keyframes(&self, mut keyframes: Vec<DetailedKeyframeInfo>, frame_rate: f64) -> TrimXResult<GOPAnalysis> {
+    fn analyze_keyframes(
+        &self,
+        mut keyframes: Vec<DetailedKeyframeInfo>,
+        frame_rate: f64,
+    ) -> TrimXResult<GOPAnalysis> {
         if keyframes.len() < 2 {
             return Err(TrimXError::ClippingError {
-                message: "Need at least 2 keyframes for GOP analysis".to_string()
+                message: "Need at least 2 keyframes for GOP analysis".to_string(),
             });
         }
 
@@ -220,20 +252,20 @@ impl KeyframeAnalyzer {
         for i in 0..keyframes.len() {
             // Calculate distance to previous keyframe
             if i > 0 {
-                let distance = keyframes[i].timestamp - keyframes[i-1].timestamp;
+                let distance = keyframes[i].timestamp - keyframes[i - 1].timestamp;
                 keyframes[i].distance_to_prev = Some(distance);
             }
 
             // Calculate distance to next keyframe and GOP size
             if i < keyframes.len() - 1 {
-                let distance = keyframes[i+1].timestamp - keyframes[i].timestamp;
+                let distance = keyframes[i + 1].timestamp - keyframes[i].timestamp;
                 keyframes[i].distance_to_next = Some(distance);
                 keyframes[i].gop_duration = Some(distance);
-                
+
                 // Estimate GOP size in frames
                 let gop_frames = (distance * frame_rate).round() as u32;
                 keyframes[i].gop_size_frames = Some(gop_frames);
-                
+
                 gop_durations.push(distance);
                 gop_sizes_frames.push(gop_frames);
             }
@@ -242,10 +274,14 @@ impl KeyframeAnalyzer {
         // Calculate statistics
         let keyframe_count = keyframes.len();
         let avg_gop_duration = gop_durations.iter().sum::<f64>() / gop_durations.len() as f64;
-        let avg_gop_size_frames = gop_sizes_frames.iter().sum::<u32>() as f64 / gop_sizes_frames.len() as f64;
-        
+        let avg_gop_size_frames =
+            gop_sizes_frames.iter().sum::<u32>() as f64 / gop_sizes_frames.len() as f64;
+
         let min_gop_duration = gop_durations.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max_gop_duration = gop_durations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_gop_duration = gop_durations
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
 
         // Calculate regularity score
         let regularity_score = self.calculate_regularity_score(&gop_durations, avg_gop_duration);
@@ -272,10 +308,12 @@ impl KeyframeAnalyzer {
         }
 
         // Calculate coefficient of variation
-        let variance = gop_durations.iter()
+        let variance = gop_durations
+            .iter()
             .map(|&duration| (duration - avg_duration).powi(2))
-            .sum::<f64>() / gop_durations.len() as f64;
-        
+            .sum::<f64>()
+            / gop_durations.len() as f64;
+
         let std_dev = variance.sqrt();
         let coefficient_of_variation = std_dev / avg_duration;
 
@@ -283,7 +321,7 @@ impl KeyframeAnalyzer {
         // CV < 0.1 = very regular (score ~0.9-1.0)
         // CV > 0.5 = very irregular (score ~0.0)
         let regularity = (-coefficient_of_variation * 5.0).exp();
-        regularity.min(1.0).max(0.0)
+        regularity.clamp(0.0, 1.0)
     }
 
     /// Detect GOP pattern if regular
@@ -298,7 +336,8 @@ impl KeyframeAnalyzer {
             *frequency_map.entry(size).or_insert(0) += 1;
         }
 
-        let most_common_size = frequency_map.iter()
+        let most_common_size = frequency_map
+            .iter()
             .max_by_key(|(_, &count)| count)
             .map(|(&size, _)| size)?;
 
@@ -314,15 +353,25 @@ impl KeyframeAnalyzer {
     }
 
     /// Find optimal cut points near target times
-    pub fn find_optimal_cut_points(&self, analysis: &GOPAnalysis, start_time: f64, end_time: f64) -> (f64, f64) {
+    pub fn find_optimal_cut_points(
+        &self,
+        analysis: &GOPAnalysis,
+        start_time: f64,
+        end_time: f64,
+    ) -> (f64, f64) {
         let optimal_start = self.find_nearest_keyframe(&analysis.keyframes, start_time, true);
         let optimal_end = self.find_nearest_keyframe(&analysis.keyframes, end_time, false);
-        
+
         (optimal_start, optimal_end)
     }
 
     /// Find nearest keyframe to target time
-    fn find_nearest_keyframe(&self, keyframes: &[DetailedKeyframeInfo], target_time: f64, prefer_earlier: bool) -> f64 {
+    fn find_nearest_keyframe(
+        &self,
+        keyframes: &[DetailedKeyframeInfo],
+        target_time: f64,
+        prefer_earlier: bool,
+    ) -> f64 {
         if keyframes.is_empty() {
             return target_time;
         }
@@ -332,7 +381,7 @@ impl KeyframeAnalyzer {
 
         for keyframe in keyframes {
             let distance = (keyframe.timestamp - target_time).abs();
-            
+
             // For start cuts, prefer earlier keyframes if within tolerance
             // For end cuts, prefer later keyframes if within tolerance
             let is_better = if distance < best_distance {
@@ -358,7 +407,10 @@ impl KeyframeAnalyzer {
 
     /// Check if a time point aligns well with keyframes
     pub fn is_keyframe_aligned(&self, analysis: &GOPAnalysis, time: f64) -> bool {
-        analysis.keyframes.iter().any(|kf| (kf.timestamp - time).abs() < self.alignment_tolerance)
+        analysis
+            .keyframes
+            .iter()
+            .any(|kf| (kf.timestamp - time).abs() < self.alignment_tolerance)
     }
 
     /// Convert PTS to seconds using timebase
@@ -373,7 +425,8 @@ impl KeyframeAnalyzer {
     /// Estimate frame rate from stream
     fn estimate_frame_rate(&self, stream: &ffmpeg_next::Stream) -> f64 {
         if stream.avg_frame_rate().denominator() != 0 {
-            stream.avg_frame_rate().numerator() as f64 / stream.avg_frame_rate().denominator() as f64
+            stream.avg_frame_rate().numerator() as f64
+                / stream.avg_frame_rate().denominator() as f64
         } else {
             // Fallback to common frame rates
             25.0
@@ -383,14 +436,26 @@ impl KeyframeAnalyzer {
     /// Generate summary report
     pub fn generate_summary(&self, analysis: &GOPAnalysis) -> String {
         let mut summary = String::new();
-        
-        summary.push_str(&format!("GOP Analysis Summary:\n"));
+
+        summary.push_str("GOP Analysis Summary:\n");
         summary.push_str(&format!("  Total Keyframes: {}\n", analysis.keyframe_count));
-        summary.push_str(&format!("  Average GOP Duration: {:.3}s\n", analysis.avg_gop_duration));
-        summary.push_str(&format!("  Average GOP Size: {:.1} frames\n", analysis.avg_gop_size_frames));
-        summary.push_str(&format!("  GOP Range: {:.3}s - {:.3}s\n", analysis.min_gop_duration, analysis.max_gop_duration));
-        summary.push_str(&format!("  Regularity Score: {:.2}\n", analysis.regularity_score));
-        
+        summary.push_str(&format!(
+            "  Average GOP Duration: {:.3}s\n",
+            analysis.avg_gop_duration
+        ));
+        summary.push_str(&format!(
+            "  Average GOP Size: {:.1} frames\n",
+            analysis.avg_gop_size_frames
+        ));
+        summary.push_str(&format!(
+            "  GOP Range: {:.3}s - {:.3}s\n",
+            analysis.min_gop_duration, analysis.max_gop_duration
+        ));
+        summary.push_str(&format!(
+            "  Regularity Score: {:.2}\n",
+            analysis.regularity_score
+        ));
+
         if let Some(ref pattern) = analysis.gop_pattern {
             summary.push_str(&format!("  Detected Pattern: {}\n", pattern));
         }
@@ -404,9 +469,9 @@ impl KeyframeAnalyzer {
         } else {
             "Highly Irregular"
         };
-        
+
         summary.push_str(&format!("  Structure: {}\n", regularity_desc));
-        
+
         summary
     }
 }

@@ -4,8 +4,8 @@
 
 use async_trait::async_trait;
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
+use crate::domain::model::*;
 use crate::ports::*;
 
 /// FFprobe-based probe adapter
@@ -24,31 +24,50 @@ impl ProbePort for FFprobeAdapter {
         // TODO: Implement actual FFprobe integration
         Err(DomainError::NotImplemented)
     }
-    
-    async fn get_video_stream_info(&self, _file_path: &str, _stream_index: usize) -> Result<VideoStreamInfo, DomainError> {
+
+    async fn get_video_stream_info(
+        &self,
+        _file_path: &str,
+        _stream_index: usize,
+    ) -> Result<VideoStreamInfo, DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
-    async fn get_audio_stream_info(&self, _file_path: &str, _stream_index: usize) -> Result<AudioStreamInfo, DomainError> {
+
+    async fn get_audio_stream_info(
+        &self,
+        _file_path: &str,
+        _stream_index: usize,
+    ) -> Result<AudioStreamInfo, DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
-    async fn get_subtitle_stream_info(&self, _file_path: &str, _stream_index: usize) -> Result<SubtitleStreamInfo, DomainError> {
+
+    async fn get_subtitle_stream_info(
+        &self,
+        _file_path: &str,
+        _stream_index: usize,
+    ) -> Result<SubtitleStreamInfo, DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
+
     async fn is_format_supported(&self, _file_path: &str) -> Result<bool, DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
-    async fn get_stream_counts(&self, _file_path: &str) -> Result<(usize, usize, usize), DomainError> {
+
+    async fn get_stream_counts(
+        &self,
+        _file_path: &str,
+    ) -> Result<(usize, usize, usize), DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
-    async fn probe_keyframes(&self, _file_path: &str, _stream_index: usize) -> Result<Vec<KeyframeInfo>, DomainError> {
+
+    async fn probe_keyframes(
+        &self,
+        _file_path: &str,
+        _stream_index: usize,
+    ) -> Result<Vec<KeyframeInfo>, DomainError> {
         Err(DomainError::NotImplemented)
     }
-    
+
     async fn validate_file(&self, _file_path: &str) -> Result<bool, DomainError> {
         Err(DomainError::NotImplemented)
     }

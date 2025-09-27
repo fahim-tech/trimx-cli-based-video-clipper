@@ -1,7 +1,7 @@
 // Domain use cases - Use case orchestration
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
+use crate::domain::model::*;
 
 /// Core use case for video clipping
 pub struct ClipUseCase;

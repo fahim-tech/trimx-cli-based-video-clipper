@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod writer;
 pub mod verifier;
+pub mod writer;
 
 /// Output configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

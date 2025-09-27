@@ -10,6 +10,7 @@ pub struct StreamMapper;
 
 impl StreamMapper {
     /// Create a new stream mapper
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }

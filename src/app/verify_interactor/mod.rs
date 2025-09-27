@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use crate::domain::model::*;
 use crate::domain::errors::*;
+use crate::domain::model::*;
 use crate::ports::*;
 
 /// Interactor for output verification use case
@@ -26,25 +26,29 @@ impl VerifyInteractor {
             log_port,
         }
     }
-    
+
     /// Execute output verification
     pub async fn execute(&self, request: VerifyRequest) -> Result<VerifyResponse, DomainError> {
         self.verify_output(request).await
     }
-    
+
     /// Execute output verification (alias for compatibility)
-    pub async fn verify_output(&self, request: VerifyRequest) -> Result<VerifyResponse, DomainError> {
+    pub async fn verify_output(
+        &self,
+        request: VerifyRequest,
+    ) -> Result<VerifyResponse, DomainError> {
         // Parse time strings if expected_range is not properly set
-        let expected_range = if !request.expected_start.is_empty() && !request.expected_end.is_empty() {
-            let start = TimeSpec::parse(&request.expected_start)
-                .map_err(|e| DomainError::BadArgs(format!("Invalid start time: {}", e)))?;
-            let end = TimeSpec::parse(&request.expected_end)
-                .map_err(|e| DomainError::BadArgs(format!("Invalid end time: {}", e)))?;
-            CutRange::new(start, end)
-                .map_err(|e| DomainError::BadArgs(format!("Invalid cut range: {}", e)))?
-        } else {
-            request.expected_range.clone()
-        };
+        let expected_range =
+            if !request.expected_start.is_empty() && !request.expected_end.is_empty() {
+                let start = TimeSpec::parse(&request.expected_start)
+                    .map_err(|e| DomainError::BadArgs(format!("Invalid start time: {}", e)))?;
+                let end = TimeSpec::parse(&request.expected_end)
+                    .map_err(|e| DomainError::BadArgs(format!("Invalid end time: {}", e)))?;
+                CutRange::new(start, end)
+                    .map_err(|e| DomainError::BadArgs(format!("Invalid cut range: {}", e)))?
+            } else {
+                request.expected_range.clone()
+            };
 
         // Use output_path as primary, fall back to output_file for compatibility
         let output_file = if !request.output_path.is_empty() {
@@ -52,7 +56,7 @@ impl VerifyInteractor {
         } else {
             request.output_file.clone()
         };
-        
+
         // Create a processed request for the existing logic
         let processed_request = VerifyRequest {
             output_file: output_file.clone(),
@@ -65,17 +69,32 @@ impl VerifyInteractor {
             expected_start: request.expected_start,
             expected_end: request.expected_end,
         };
-        
+
         // Log start of operation
-        self.log_port.info(&format!("Starting output verification for: {}", processed_request.output_file)).await;
-        
+        self.log_port
+            .info(&format!(
+                "Starting output verification for: {}",
+                processed_request.output_file
+            ))
+            .await;
+
         // Validate output file exists
-        if !self.fs_port.file_exists(&processed_request.output_file).await? {
-            return Err(DomainError::FsFail(format!("Output file does not exist: {}", processed_request.output_file)));
+        if !self
+            .fs_port
+            .file_exists(&processed_request.output_file)
+            .await?
+        {
+            return Err(DomainError::FsFail(format!(
+                "Output file does not exist: {}",
+                processed_request.output_file
+            )));
         }
-        
+
         // Probe output file
-        let output_media_info = self.probe_port.probe_media(&processed_request.output_file).await?;
+        let output_media_info = self
+            .probe_port
+            .probe_media(&processed_request.output_file)
+            .await?;
         self.log_port
             .info(&format!(
                 "Output file probed: duration {}, {} streams",
@@ -83,33 +102,45 @@ impl VerifyInteractor {
                 output_media_info.total_streams()
             ))
             .await;
-        
+
         // Perform verification checks
-        let file_metadata = self.fs_port.get_file_metadata(&processed_request.output_file).await?;
+        let file_metadata = self
+            .fs_port
+            .get_file_metadata(&processed_request.output_file)
+            .await?;
 
         let verification_result = self
             .perform_verification_checks(&processed_request, &output_media_info, &file_metadata)
             .await?;
-        
+
         // Log completion
         if verification_result.success {
-            self.log_port.info("Output verification completed successfully").await;
+            self.log_port
+                .info("Output verification completed successfully")
+                .await;
         } else {
             self.log_port
-                .warn(&format!("Output verification failed: {}", verification_result.error_message))
+                .warn(&format!(
+                    "Output verification failed: {}",
+                    verification_result.error_message
+                ))
                 .await;
         }
-        
+
         Ok(VerifyResponse {
             output_file: processed_request.output_file,
             verification_result: verification_result.clone(),
             output_media_info,
             file_metadata,
             is_valid: verification_result.success,
-            message: if verification_result.success { None } else { Some(verification_result.error_message) },
+            message: if verification_result.success {
+                None
+            } else {
+                Some(verification_result.error_message)
+            },
         })
     }
-    
+
     /// Perform comprehensive verification checks
     async fn perform_verification_checks(
         &self,
@@ -120,7 +151,7 @@ impl VerifyInteractor {
         let mut checks = Vec::new();
         let mut success = true;
         let mut error_message = String::new();
-        
+
         // Check 1: Duration verification
         let duration_check = self.verify_duration(
             &request.expected_range,
@@ -132,7 +163,7 @@ impl VerifyInteractor {
             success = false;
             error_message = duration_check.error_message;
         }
-        
+
         // Check 2: File size verification
         let size_check = self.verify_file_size(&file_metadata.size);
         checks.push(size_check.clone());
@@ -140,7 +171,7 @@ impl VerifyInteractor {
             success = false;
             error_message = size_check.error_message;
         }
-        
+
         // Check 3: Stream verification
         let stream_check = self.verify_streams(output_media_info, &request.expected_mode);
         checks.push(stream_check.clone());
@@ -148,7 +179,7 @@ impl VerifyInteractor {
             success = false;
             error_message = stream_check.error_message;
         }
-        
+
         // Check 4: Format verification
         let format_check = self.verify_format(output_media_info);
         checks.push(format_check.clone());
@@ -156,7 +187,7 @@ impl VerifyInteractor {
             success = false;
             error_message = format_check.error_message;
         }
-        
+
         let overall_score = self.calculate_overall_score(&checks);
         Ok(VerificationResult {
             success,
@@ -165,7 +196,7 @@ impl VerifyInteractor {
             overall_score,
         })
     }
-    
+
     /// Verify output duration matches expected range
     fn verify_duration(
         &self,
@@ -176,7 +207,7 @@ impl VerifyInteractor {
         let expected_duration = expected_range.duration();
         let duration_diff = (actual_duration.seconds - expected_duration.seconds).abs();
         let tolerance_seconds = tolerance_ms as f64 / 1000.0;
-        
+
         if duration_diff <= tolerance_seconds {
             VerificationCheck {
                 check_type: "duration".to_string(),
@@ -188,13 +219,18 @@ impl VerifyInteractor {
             VerificationCheck {
                 check_type: "duration".to_string(),
                 success: false,
-                error_message: format!("Duration mismatch: expected {:.3}s, got {:.3}s (diff: {:.3}s)", 
-                    expected_duration.seconds, actual_duration.seconds, duration_diff),
-                details: format!("Duration difference exceeds tolerance of {}ms", tolerance_ms),
+                error_message: format!(
+                    "Duration mismatch: expected {:.3}s, got {:.3}s (diff: {:.3}s)",
+                    expected_duration.seconds, actual_duration.seconds, duration_diff
+                ),
+                details: format!(
+                    "Duration difference exceeds tolerance of {}ms",
+                    tolerance_ms
+                ),
             }
         }
     }
-    
+
     /// Verify file size is reasonable
     fn verify_file_size(&self, file_size: &u64) -> VerificationCheck {
         if *file_size > 0 {
@@ -202,7 +238,11 @@ impl VerifyInteractor {
                 check_type: "file_size".to_string(),
                 success: true,
                 error_message: String::new(),
-                details: format!("File size: {} bytes ({:.2} MB)", file_size, *file_size as f64 / 1_048_576.0),
+                details: format!(
+                    "File size: {} bytes ({:.2} MB)",
+                    file_size,
+                    *file_size as f64 / 1_048_576.0
+                ),
             }
         } else {
             VerificationCheck {
@@ -213,9 +253,13 @@ impl VerifyInteractor {
             }
         }
     }
-    
+
     /// Verify streams are present and valid
-    fn verify_streams(&self, media_info: &MediaInfo, _expected_mode: &ClippingMode) -> VerificationCheck {
+    fn verify_streams(
+        &self,
+        media_info: &MediaInfo,
+        _expected_mode: &ClippingMode,
+    ) -> VerificationCheck {
         if media_info.total_streams() == 0 {
             VerificationCheck {
                 check_type: "streams".to_string(),
@@ -228,15 +272,17 @@ impl VerifyInteractor {
                 check_type: "streams".to_string(),
                 success: true,
                 error_message: String::new(),
-                details: format!("Found {} streams ({} video, {} audio, {} subtitle)", 
+                details: format!(
+                    "Found {} streams ({} video, {} audio, {} subtitle)",
                     media_info.total_streams(),
                     media_info.video_streams.len(),
                     media_info.audio_streams.len(),
-                    media_info.subtitle_streams.len()),
+                    media_info.subtitle_streams.len()
+                ),
             }
         }
     }
-    
+
     /// Verify format is valid
     fn verify_format(&self, media_info: &MediaInfo) -> VerificationCheck {
         if media_info.container.is_empty() {
@@ -255,12 +301,12 @@ impl VerifyInteractor {
             }
         }
     }
-    
+
     /// Calculate overall verification score
     fn calculate_overall_score(&self, checks: &[VerificationCheck]) -> f32 {
         let total_checks = checks.len();
         let passed_checks = checks.iter().filter(|check| check.success).count();
-        
+
         if total_checks == 0 {
             0.0
         } else {
@@ -273,23 +319,19 @@ impl VerifyInteractor {
 #[derive(Debug, Clone)]
 pub struct VerifyRequest {
     pub output_path: String,
-    pub output_file: String,  // For backward compatibility
+    pub output_file: String, // For backward compatibility
     pub expected_start: String,
     pub expected_end: String,
     pub expected_range: CutRange,
     pub mode: ClippingMode,
-    pub expected_mode: ClippingMode,  // For backward compatibility
+    pub expected_mode: ClippingMode, // For backward compatibility
     pub tolerance: u32,
-    pub tolerance_ms: u32,  // For backward compatibility
+    pub tolerance_ms: u32, // For backward compatibility
 }
 
 impl VerifyRequest {
     /// Create new verify request
-    pub fn new(
-        output_file: String,
-        expected_range: CutRange,
-        expected_mode: ClippingMode,
-    ) -> Self {
+    pub fn new(output_file: String, expected_range: CutRange, expected_mode: ClippingMode) -> Self {
         Self {
             output_path: output_file.clone(),
             output_file,
@@ -302,7 +344,7 @@ impl VerifyRequest {
             tolerance_ms: 100, // Default 100ms tolerance
         }
     }
-    
+
     /// Create new verify request with custom tolerance
     pub fn with_tolerance(
         output_file: String,

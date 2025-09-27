@@ -8,6 +8,7 @@ pub struct PathUtils;
 
 impl PathUtils {
     /// Create a new path utils instance
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }
@@ -70,7 +71,7 @@ impl PathUtils {
         }
 
         let resolved = base_path.join(relative).canonicalize()
-            .map_err(|e| TrimXError::IoError(e))?;
+            .map_err(TrimXError::IoError)?;
 
         Ok(resolved.to_string_lossy().to_string())
     }

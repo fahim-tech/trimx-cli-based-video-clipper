@@ -1,7 +1,7 @@
 //! GOP analysis implementation
 
-use tracing::info;
 use crate::error::TrimXResult;
+use tracing::info;
 
 /// GOP analyzer for keyframe detection
 pub struct GOPAnalyzer;
@@ -11,11 +11,22 @@ impl GOPAnalyzer {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for GOPAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GOPAnalyzer {
     /// Analyze GOP structure
     pub fn analyze_gop(&self, input_path: &str, stream_index: usize) -> TrimXResult<()> {
-        info!("Analyzing GOP structure for: {} (stream {})", input_path, stream_index);
-        
+        info!(
+            "Analyzing GOP structure for: {} (stream {})",
+            input_path, stream_index
+        );
+
         // Placeholder implementation
         info!("GOP analysis completed");
         Ok(())

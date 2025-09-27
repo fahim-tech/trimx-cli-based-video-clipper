@@ -1,10 +1,13 @@
 //! Memory management and optimization for large file processing
 
-use std::sync::{Arc, Mutex, atomic::{AtomicU64, AtomicUsize, Ordering}};
-use std::collections::VecDeque;
-use std::time::Duration;
-use tracing::{info, debug};
 use crate::error::{TrimXError, TrimXResult};
+use std::collections::VecDeque;
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc, Mutex,
+};
+use std::time::Duration;
+use tracing::{debug, info};
 
 /// Memory management configuration
 #[derive(Debug, Clone)]
@@ -98,10 +101,10 @@ impl Default for MemoryConfig {
         Self {
             max_memory: 1024 * 1024 * 1024, // 1GB default
             buffer_size: 1024 * 1024,       // 1MB buffer size
-            max_frame_buffer: 100,           // Max 100 frames
-            enable_compression: false,        // Disabled by default (CPU overhead)
+            max_frame_buffer: 100,          // Max 100 frames
+            enable_compression: false,      // Disabled by default (CPU overhead)
             monitor_interval: Duration::from_secs(1),
-            gc_threshold: 80.0,              // GC at 80% memory usage
+            gc_threshold: 80.0, // GC at 80% memory usage
         }
     }
 }
@@ -165,7 +168,7 @@ impl MemoryManager {
     pub fn start_monitoring(&mut self) -> TrimXResult<()> {
         if self.monitoring_thread.is_some() {
             return Err(TrimXError::ClippingError {
-                message: "Memory monitoring already started".to_string()
+                message: "Memory monitoring already started".to_string(),
             });
         }
 
@@ -178,11 +181,11 @@ impl MemoryManager {
         let handle = std::thread::spawn(move || {
             loop {
                 std::thread::sleep(interval);
-                
+
                 // Update system memory info
                 if let Ok(mut stats) = stats.lock() {
                     stats.system_memory = Self::get_system_memory_info();
-                    
+
                     // Check if we need garbage collection
                     let usage_pct = (stats.current_usage as f64 / max_memory as f64) * 100.0;
                     if usage_pct > gc_threshold {
@@ -194,7 +197,10 @@ impl MemoryManager {
         });
 
         self.monitoring_thread = Some(handle);
-        info!("Memory monitoring started with limit: {} MB", self.config.max_memory / 1024 / 1024);
+        info!(
+            "Memory monitoring started with limit: {} MB",
+            self.config.max_memory / 1024 / 1024
+        );
         Ok(())
     }
 
@@ -202,7 +208,7 @@ impl MemoryManager {
     pub fn stop_monitoring(&mut self) {
         if let Some(handle) = self.monitoring_thread.take() {
             handle.thread().unpark(); // This won't actually stop the thread cleanly
-            // In a real implementation, you'd use a channel or atomic flag to stop the thread
+                                      // In a real implementation, you'd use a channel or atomic flag to stop the thread
             info!("Memory monitoring stopped");
         }
     }
@@ -216,7 +222,7 @@ impl MemoryManager {
                 message: format!(
                     "Memory limit exceeded: {} + {} > {}",
                     current, self.config.buffer_size, self.config.max_memory
-                )
+                ),
             });
         }
 
@@ -228,13 +234,19 @@ impl MemoryManager {
         };
 
         // Update usage statistics
-        self.current_usage.fetch_add(buffer.len() as u64, Ordering::Relaxed);
+        self.current_usage
+            .fetch_add(buffer.len() as u64, Ordering::Relaxed);
         let new_usage = self.current_usage.load(Ordering::Relaxed);
-        
+
         // Update peak usage
         let mut peak = self.peak_usage.load(Ordering::Relaxed);
         while new_usage > peak {
-            match self.peak_usage.compare_exchange_weak(peak, new_usage, Ordering::Relaxed, Ordering::Relaxed) {
+            match self.peak_usage.compare_exchange_weak(
+                peak,
+                new_usage,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
                 Ok(_) => break,
                 Err(x) => peak = x,
             }
@@ -267,7 +279,7 @@ impl MemoryManager {
     pub fn get_stats(&self) -> Option<MemoryStats> {
         self.stats.lock().ok().map(|stats| {
             let mut stats = stats.clone();
-            
+
             // Update buffer pool stats
             if let Ok(pool) = self.buffer_pool.lock() {
                 stats.buffer_pool_stats = pool.get_stats();
@@ -296,7 +308,7 @@ impl MemoryManager {
     fn get_system_memory_info() -> SystemMemoryInfo {
         // Simplified implementation - in production would use platform-specific APIs
         SystemMemoryInfo {
-            total_memory: 8 * 1024 * 1024 * 1024, // Assume 8GB
+            total_memory: 8 * 1024 * 1024 * 1024,     // Assume 8GB
             available_memory: 4 * 1024 * 1024 * 1024, // Assume 4GB available
             usage_percentage: 50.0,
             process_memory: 512 * 1024 * 1024, // Assume 512MB process usage
@@ -331,29 +343,65 @@ impl MemoryManager {
         });
 
         let mut report = String::new();
-        
+
         report.push_str("Memory Usage Report:\n");
-        report.push_str(&format!("  Current Usage: {:.1} MB\n", stats.current_usage as f64 / 1024.0 / 1024.0));
-        report.push_str(&format!("  Peak Usage: {:.1} MB\n", stats.peak_usage as f64 / 1024.0 / 1024.0));
-        report.push_str(&format!("  Memory Limit: {:.1} MB\n", self.config.max_memory as f64 / 1024.0 / 1024.0));
-        
+        report.push_str(&format!(
+            "  Current Usage: {:.1} MB\n",
+            stats.current_usage as f64 / 1024.0 / 1024.0
+        ));
+        report.push_str(&format!(
+            "  Peak Usage: {:.1} MB\n",
+            stats.peak_usage as f64 / 1024.0 / 1024.0
+        ));
+        report.push_str(&format!(
+            "  Memory Limit: {:.1} MB\n",
+            self.config.max_memory as f64 / 1024.0 / 1024.0
+        ));
+
         let usage_pct = (stats.current_usage as f64 / self.config.max_memory as f64) * 100.0;
         report.push_str(&format!("  Usage Percentage: {:.1}%\n", usage_pct));
-        
-        report.push_str(&format!("  Total Allocations: {}\n", stats.total_allocations));
-        report.push_str(&format!("  Total Deallocations: {}\n", stats.total_deallocations));
-        
+
+        report.push_str(&format!(
+            "  Total Allocations: {}\n",
+            stats.total_allocations
+        ));
+        report.push_str(&format!(
+            "  Total Deallocations: {}\n",
+            stats.total_deallocations
+        ));
+
         report.push_str("\nBuffer Pool:\n");
-        report.push_str(&format!("  Total Buffers: {}\n", stats.buffer_pool_stats.total_buffers));
-        report.push_str(&format!("  Buffers In Use: {}\n", stats.buffer_pool_stats.buffers_in_use));
-        report.push_str(&format!("  Buffers Available: {}\n", stats.buffer_pool_stats.buffers_available));
-        report.push_str(&format!("  Hit Ratio: {:.1}%\n", stats.buffer_pool_stats.hit_ratio * 100.0));
-        
+        report.push_str(&format!(
+            "  Total Buffers: {}\n",
+            stats.buffer_pool_stats.total_buffers
+        ));
+        report.push_str(&format!(
+            "  Buffers In Use: {}\n",
+            stats.buffer_pool_stats.buffers_in_use
+        ));
+        report.push_str(&format!(
+            "  Buffers Available: {}\n",
+            stats.buffer_pool_stats.buffers_available
+        ));
+        report.push_str(&format!(
+            "  Hit Ratio: {:.1}%\n",
+            stats.buffer_pool_stats.hit_ratio * 100.0
+        ));
+
         report.push_str("\nSystem Memory:\n");
-        report.push_str(&format!("  Total: {:.1} GB\n", stats.system_memory.total_memory as f64 / 1024.0 / 1024.0 / 1024.0));
-        report.push_str(&format!("  Available: {:.1} GB\n", stats.system_memory.available_memory as f64 / 1024.0 / 1024.0 / 1024.0));
-        report.push_str(&format!("  System Usage: {:.1}%\n", stats.system_memory.usage_percentage));
-        
+        report.push_str(&format!(
+            "  Total: {:.1} GB\n",
+            stats.system_memory.total_memory as f64 / 1024.0 / 1024.0 / 1024.0
+        ));
+        report.push_str(&format!(
+            "  Available: {:.1} GB\n",
+            stats.system_memory.available_memory as f64 / 1024.0 / 1024.0 / 1024.0
+        ));
+        report.push_str(&format!(
+            "  System Usage: {:.1}%\n",
+            stats.system_memory.usage_percentage
+        ));
+
         report
     }
 }
@@ -371,7 +419,7 @@ impl BufferPool {
 
     fn get_buffer(&mut self) -> Vec<u8> {
         self.total_allocations.fetch_add(1, Ordering::Relaxed);
-        
+
         if let Some(buffer) = self.buffers.pop_front() {
             self.total_hits.fetch_add(1, Ordering::Relaxed);
             buffer
@@ -398,7 +446,7 @@ impl BufferPool {
     fn get_stats(&self) -> BufferPoolStats {
         let total_allocs = self.total_allocations.load(Ordering::Relaxed);
         let total_hits = self.total_hits.load(Ordering::Relaxed);
-        
+
         let hit_ratio = if total_allocs > 0 {
             total_hits as f64 / total_allocs as f64
         } else {
@@ -433,7 +481,7 @@ impl PooledBuffer {
 
     /// Check if buffer is empty
     pub fn is_empty(&self) -> bool {
-        self.data.as_ref().map_or(true, |d| d.is_empty())
+        self.data.as_ref().is_none_or(|d| d.is_empty())
     }
 }
 
@@ -473,8 +521,8 @@ mod tests {
     fn test_buffer_allocation() {
         let manager = MemoryManager::with_defaults();
         let buffer = manager.allocate_buffer().unwrap();
-        
-        assert!(buffer.len() > 0);
+
+        assert!(!buffer.is_empty());
         assert!(manager.get_current_usage() > 0);
     }
 
@@ -488,10 +536,10 @@ mod tests {
 
         // First allocation should succeed
         let _buffer1 = manager.allocate_buffer().unwrap();
-        
+
         // Second allocation should succeed (512 + 512 = 1024)
         let _buffer2 = manager.allocate_buffer().unwrap();
-        
+
         // Third allocation should fail (would exceed 1024 bytes)
         assert!(manager.allocate_buffer().is_err());
     }
@@ -499,15 +547,15 @@ mod tests {
     #[test]
     fn test_buffer_pool_reuse() {
         let manager = MemoryManager::with_defaults();
-        
+
         // Allocate and drop buffer
         {
             let _buffer = manager.allocate_buffer().unwrap();
         }
-        
+
         // Memory should be reduced after drop
         std::thread::sleep(Duration::from_millis(10)); // Allow drop to complete
-        
+
         // Allocate again - should reuse from pool
         let _buffer2 = manager.allocate_buffer().unwrap();
     }

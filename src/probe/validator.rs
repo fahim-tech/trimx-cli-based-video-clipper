@@ -1,7 +1,7 @@
 //! Media file validation utilities
 
-use crate::probe::MediaInfo;
 use crate::error::{TrimXError, TrimXResult};
+use crate::probe::MediaInfo;
 
 /// Media file validator
 pub struct MediaValidator;

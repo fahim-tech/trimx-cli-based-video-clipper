@@ -111,6 +111,7 @@ impl Default for SubtitleConfig {
 
 impl SubtitleProcessor {
     /// Create a new subtitle processor
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self { debug: false }
     }

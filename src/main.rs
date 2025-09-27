@@ -23,24 +23,24 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::{error, info};
 
-mod cli;
-mod domain;
-mod app;
 mod adapters;
-mod ports;
-mod planner;
-mod error;
+mod app;
+mod cli;
+mod config_initialization;
+mod domain;
 mod engine;
+mod error;
 mod output;
+mod planner;
+mod ports;
 mod probe;
 mod streams;
 mod utils;
-mod config_initialization;
 
+use crate::app::container::{AppContainer, DefaultAppContainer};
 use crate::cli::{Cli, Commands};
 use crate::domain::errors::DomainError;
 use crate::domain::model::{CutRange, TimeSpec};
-use crate::app::container::{AppContainer, DefaultAppContainer};
 
 /// Main entry point for the TrimX CLI application
 #[tokio::main]
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
     // Initialize dependency container
     let container = DefaultAppContainer::new()
         .map_err(|e| anyhow::anyhow!("Failed to initialize application: {}", e))?;
-        
+
     // Initialize configuration hierarchy (CLI → Env → File → Defaults)
     config_initialization::initialize_configuration_hierarchy(&container, &cli).await?;
 
@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
         }
         Err(e) => {
             error!("TrimX CLI failed: {}", e);
-            
+
             // Provide helpful error messages based on error type
             if let Some(domain_error) = e.downcast_ref::<DomainError>() {
                 let exit_code = match domain_error {
@@ -170,7 +170,7 @@ async fn main() -> Result<()> {
 /// Execute clip command using application layer
 fn execute_clip_command(container: &DefaultAppContainer, args: crate::cli::ClipArgs) -> Result<()> {
     let interactor = container.clip_interactor();
-    
+
     // Convert CLI args to domain model
     let request = crate::app::clip_interactor::ClipRequest {
         input_path: args.input.clone(),
@@ -179,28 +179,34 @@ fn execute_clip_command(container: &DefaultAppContainer, args: crate::cli::ClipA
         output_file: args.output,
         start_time: args.start,
         end_time: args.end,
-        cut_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001)).unwrap(),
+        cut_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001))
+            .unwrap(),
         mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
         quality: args.quality,
         quality_settings: None,
         overwrite: args.overwrite,
         threads: args.threads,
     };
-    
+
     match tokio::runtime::Runtime::new() {
         Ok(rt) => rt.block_on(async {
-            let _result = interactor.clip_video(request).await
+            let _result = interactor
+                .clip_video(request)
+                .await
                 .map_err(|e| anyhow::anyhow!("Clip operation failed: {}", e))?;
             Ok(())
         }),
-        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e))
+        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e)),
     }
 }
 
 /// Execute inspect command using application layer
-fn execute_inspect_command(container: &DefaultAppContainer, args: crate::cli::InspectArgs) -> Result<()> {
+fn execute_inspect_command(
+    container: &DefaultAppContainer,
+    args: crate::cli::InspectArgs,
+) -> Result<()> {
     let interactor = container.inspect_interactor();
-    
+
     let request = crate::app::inspect_interactor::InspectRequest {
         input_path: args.input.clone(),
         input: args.input,
@@ -208,54 +214,64 @@ fn execute_inspect_command(container: &DefaultAppContainer, args: crate::cli::In
         show_streams: args.show_streams,
         show_keyframes: args.show_keyframes,
     };
-    
+
     match tokio::runtime::Runtime::new() {
         Ok(rt) => rt.block_on(async {
-            let result = interactor.inspect_file(request).await
+            let result = interactor
+                .inspect_file(request)
+                .await
                 .map_err(|e| anyhow::anyhow!("Inspect operation failed: {}", e))?;
-            
+
             // Display results
             println!("{}", result.summary);
             Ok(())
         }),
-        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e))
+        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e)),
     }
 }
 
 /// Execute verify command using application layer
-fn execute_verify_command(container: &DefaultAppContainer, args: crate::cli::VerifyArgs) -> Result<()> {
+fn execute_verify_command(
+    container: &DefaultAppContainer,
+    args: crate::cli::VerifyArgs,
+) -> Result<()> {
     let interactor = container.verify_interactor();
-    
+
     let request = crate::app::verify_interactor::VerifyRequest {
         output_path: args.output.clone(),
         output_file: args.output,
         expected_start: args.start,
         expected_end: args.end,
-        expected_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001)).unwrap(),
+        expected_range: CutRange::new(TimeSpec::from_seconds(0.0), TimeSpec::from_seconds(0.001))
+            .unwrap(),
         mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
         expected_mode: crate::domain::model::ClippingMode::parse(&args.mode)?,
         tolerance: args.tolerance,
         tolerance_ms: args.tolerance,
     };
-    
+
     match tokio::runtime::Runtime::new() {
         Ok(rt) => rt.block_on(async {
-            let result = interactor.verify_output(request).await
+            let result = interactor
+                .verify_output(request)
+                .await
                 .map_err(|e| anyhow::anyhow!("Verify operation failed: {}", e))?;
-            
+
             // Display results
-            println!("Verification Result: {}", if result.is_valid { "PASS" } else { "FAIL" });
+            println!(
+                "Verification Result: {}",
+                if result.is_valid { "PASS" } else { "FAIL" }
+            );
             if let Some(ref message) = result.message {
                 println!("Details: {}", message);
             }
-            
+
             if !result.is_valid {
                 std::process::exit(1);
             }
-            
+
             Ok(())
         }),
-        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e))
+        Err(e) => Err(anyhow::anyhow!("Failed to create async runtime: {}", e)),
     }
 }
-
